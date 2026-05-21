@@ -10,6 +10,7 @@ import {
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -52,8 +53,17 @@ import BrowserNode from './nodes/BrowserNode';
 import FrameExtractorNode from './nodes/FrameExtractorNode';
 import UploadNode from './nodes/UploadNode';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
-import type { NodeType } from '../types/canvas';
-import { isConnectionValid, getNodeOutputs, getNodeInputs, PORT_COLOR } from '../config/portTypes';
+import type { NodeType, NodeMeta } from '../types/canvas';
+import {
+  isConnectionValid,
+  getNodeOutputs,
+  getNodeInputs,
+  arePortsCompatible,
+  PORT_COLOR,
+  PORT_LABEL,
+  NODE_PORTS,
+  type PortType,
+} from '../config/portTypes';
 
 // Phase 4 阶段:全部 24 个节点均已实现业务逻辑
 const SPECIFIC_NODES: Record<string, any> = {
@@ -133,6 +143,7 @@ interface CanvasInnerProps {
 function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
   const { activeId } = useCanvasStore();
   const { theme, style } = useThemeStore();
+  const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -144,6 +155,18 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
   const clipboardRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
   const [clipboardCount, setClipboardCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 拖线到空白处的候选节点菜单(connection picker)
+  const [picker, setPicker] = useState<{
+    fromNodeId: string;
+    fromHandleType: 'source' | 'target';
+    flowPos: { x: number; y: number };
+    screenPos: { x: number; y: number };
+  } | null>(null);
+  const connectingFromRef = useRef<{
+    nodeId: string;
+    handleType: 'source' | 'target';
+  } | null>(null);
 
   // 吸附 + 对齐辅助线
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -573,6 +596,117 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
     [nodes]
   );
 
+  // ===== 拖线到空白处 → 弹出候选节点菜单 =====
+  const onConnectStart = useCallback(
+    (_e: any, params: { nodeId: string | null; handleType: 'source' | 'target' | null }) => {
+      if (!params.nodeId || !params.handleType) return;
+      connectingFromRef.current = { nodeId: params.nodeId, handleType: params.handleType };
+    },
+    []
+  );
+
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const from = connectingFromRef.current;
+      connectingFromRef.current = null;
+      if (!from) return;
+      // 终点是否落在 Handle / 节点上:是则走正常连接逻辑,否则弹出候选节点菜单
+      const target = event.target as HTMLElement | null;
+      const droppedOnPane =
+        !!target && (target.classList.contains('react-flow__pane') || target.closest('.react-flow__pane'));
+      // 只在拖到空白画布时弹出菜单
+      if (!droppedOnPane) return;
+      // 获取坐标
+      const clientX =
+        (event as MouseEvent).clientX ?? (event as TouchEvent).changedTouches?.[0]?.clientX ?? 0;
+      const clientY =
+        (event as MouseEvent).clientY ?? (event as TouchEvent).changedTouches?.[0]?.clientY ?? 0;
+      const flowPos = screenToFlowPosition({ x: clientX, y: clientY });
+      setPicker({
+        fromNodeId: from.nodeId,
+        fromHandleType: from.handleType,
+        flowPos,
+        screenPos: { x: clientX, y: clientY },
+      });
+    },
+    [screenToFlowPosition]
+  );
+
+  // 计算候选节点列表(根据起始节点输出/输入类型过滤)
+  const pickerCandidates = useMemo<Array<NodeMeta & { matchedTypes: PortType[] }>>(() => {
+    if (!picker) return [];
+    const fromNode = nodes.find((n) => n.id === picker.fromNodeId);
+    if (!fromNode) return [];
+    // 从 source handle 拉出: 源节点输出 → 候选节点需要有能收这些输出的输入
+    // 从 target handle 拉出: 源节点输入 → 候选节点需要有能被其接受的输出
+    const isFromSource = picker.fromHandleType === 'source';
+    const fromOuts = isFromSource ? getNodeOutputs(fromNode) : [];
+    const fromIns = !isFromSource ? getNodeInputs(fromNode) : [];
+
+    return NODE_REGISTRY.flatMap((meta) => {
+      // 不推荐带动态输出的 upload 作为候选 source⚡但允许它作为 target(upload 本身不受输入,实际最后会被过滤)
+      const ports = NODE_PORTS[meta.type];
+      if (!ports) return [];
+      let matched: PortType[] = [];
+      if (isFromSource) {
+        // 需要 meta.inputs 与 fromOuts 有交集
+        if (!arePortsCompatible(fromOuts, ports.inputs)) return [];
+        matched = fromOuts.filter((t) => ports.inputs.includes(t) || ports.inputs.includes('any') || t === 'any');
+      } else {
+        // 拖出 target handle⚡需要 meta.outputs 与 fromIns 有交集
+        // upload 节点 outputs 动态为 [],在此考虑 image/video/audio 均可作为潜在输出源
+        const candidateOuts = meta.type === 'upload' ? (['image', 'video', 'audio'] as PortType[]) : ports.outputs;
+        if (!arePortsCompatible(candidateOuts, fromIns)) return [];
+        matched = candidateOuts.filter((t) => fromIns.includes(t) || fromIns.includes('any') || t === 'any');
+      }
+      return [{ ...meta, matchedTypes: matched }];
+    });
+  }, [picker, nodes]);
+
+  // 点击候选项→ 在拖落位置创建节点并自动连线
+  const handlePickCandidate = useCallback(
+    (meta: NodeMeta) => {
+      if (!picker) return;
+      const id = `${meta.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const newNode: Node = {
+        id,
+        type: meta.type,
+        position: picker.flowPos,
+        data: { ...(INITIAL_DATA[meta.type] || {}) },
+      };
+      setNodes((prev) => [...prev, newNode]);
+
+      // 创建连线:根据 source/target 方向
+      const isFromSource = picker.fromHandleType === 'source';
+      const params: Connection = isFromSource
+        ? { source: picker.fromNodeId, target: id, sourceHandle: null, targetHandle: null }
+        : { source: id, target: picker.fromNodeId, sourceHandle: null, targetHandle: null };
+
+      // 染色(使用 nodes + 新节点计算)
+      const fromNode = nodes.find((n) => n.id === picker.fromNodeId);
+      const tempNewNode = newNode;
+      const src = isFromSource ? fromNode : tempNewNode;
+      const tgt = isFromSource ? tempNewNode : fromNode;
+      const outs = src ? getNodeOutputs(src) : [];
+      const ins = tgt ? getNodeInputs(tgt) : [];
+      const matched = outs.find((o) => ins.includes(o) || o === 'any' || ins.includes('any'));
+      const color = matched && matched !== 'any' ? PORT_COLOR[matched] : undefined;
+
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            ...(color ? { style: { stroke: color, strokeWidth: 2 } } : {}),
+            data: { portType: matched ?? 'any' },
+          },
+          eds
+        )
+      );
+      setPicker(null);
+    },
+    [picker, nodes]
+  );
+
   // ===== 全局快捷键 =====
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -684,6 +818,8 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={onIsValidConnection}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
@@ -765,6 +901,135 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
           nodeColor={() => (isDark ? '#a1a1aa' : '#52525b')}
         />
       </ReactFlow>
+
+      {/* 拖线到空白处弹出的候选节点菜单 */}
+      {picker && (
+        <>
+          {/* 遮罩层:点击空白关闭 */}
+          <div
+            className="absolute inset-0 z-30"
+            onClick={() => setPicker(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setPicker(null);
+            }}
+          />
+          <div
+            className="absolute z-40 rounded-xl overflow-hidden"
+            style={{
+              left: Math.min(picker.screenPos.x, window.innerWidth - 280),
+              top: Math.min(picker.screenPos.y, window.innerHeight - 360),
+              width: 260,
+              maxHeight: 360,
+              background: isPixel
+                ? '#FFFFFF'
+                : isDark
+                  ? 'rgba(20,20,22,.96)'
+                  : 'rgba(255,255,255,.98)',
+              border: isPixel
+                ? '2px solid #1A1410'
+                : `1px solid ${isDark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.1)'}`,
+              boxShadow: isPixel
+                ? '4px 4px 0 #1A1410'
+                : '0 12px 40px rgba(0,0,0,.35)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            <div
+              className="px-3 py-2 text-[11px] font-semibold flex items-center justify-between"
+              style={{
+                color: isPixel ? '#1A1410' : isDark ? '#fff' : '#18181b',
+                borderBottom: isPixel
+                  ? '2px solid #1A1410'
+                  : `1px solid ${isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'}`,
+                background: isPixel ? '#A8E6C9' : 'transparent',
+              }}
+            >
+              <span>
+                {picker.fromHandleType === 'source' ? '连接到…' : '从…输入'}
+              </span>
+              <span
+                className="text-[10px] font-normal opacity-60"
+                style={{ color: isPixel ? '#1A1410' : undefined }}
+              >
+                {pickerCandidates.length} 个候选
+              </span>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+              {pickerCandidates.length === 0 && (
+                <div
+                  className="px-3 py-4 text-[11px] text-center"
+                  style={{ color: isDark ? 'rgba(255,255,255,.4)' : 'rgba(0,0,0,.4)' }}
+                >
+                  没有可连接的节点
+                </div>
+              )}
+              {pickerCandidates.map((cand) => {
+                const primary = cand.matchedTypes[0] ?? 'any';
+                const dotColor = PORT_COLOR[primary];
+                return (
+                  <button
+                    key={cand.type}
+                    onClick={() => handlePickCandidate(cand)}
+                    className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors"
+                    style={{
+                      background: 'transparent',
+                      color: isPixel ? '#1A1410' : isDark ? '#e4e4e7' : '#27272a',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = isPixel
+                        ? '#FFE08A'
+                        : isDark
+                          ? 'rgba(255,255,255,.06)'
+                          : 'rgba(0,0,0,.04)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = 'transparent';
+                    }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{
+                        background: dotColor,
+                        boxShadow: isPixel ? '0 0 0 1.5px #1A1410' : `0 0 0 2px ${dotColor}33`,
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-medium truncate">{cand.label}</div>
+                      <div
+                        className="text-[10px] truncate"
+                        style={{
+                          color: isPixel ? '#7a6f5e' : isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.45)',
+                        }}
+                      >
+                        {cand.description}
+                      </div>
+                    </div>
+                    <div
+                      className="flex gap-1 flex-shrink-0"
+                      title={cand.matchedTypes.map((t) => PORT_LABEL[t]).join(' / ')}
+                    >
+                      {cand.matchedTypes.slice(0, 3).map((t) => (
+                        <span
+                          key={t}
+                          className="text-[9px] px-1.5 py-0.5 rounded"
+                          style={{
+                            background: PORT_COLOR[t] + '33',
+                            color: isPixel ? '#1A1410' : PORT_COLOR[t],
+                            border: isPixel ? `1.5px solid #1A1410` : `1px solid ${PORT_COLOR[t]}66`,
+                          }}
+                        >
+                          {PORT_LABEL[t]}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
