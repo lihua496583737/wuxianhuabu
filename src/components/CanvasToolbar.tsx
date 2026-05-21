@@ -13,8 +13,10 @@ import {
   Play,
   Square,
   Magnet,
+  Terminal as TerminalIcon,
 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
+import { useLogStore } from '../stores/logs';
 import { CANVAS_TEMPLATES, type CanvasTemplate } from '../config/canvasTemplates';
 
 interface CanvasToolbarProps {
@@ -65,6 +67,9 @@ export default function CanvasToolbar({
   const { theme, style } = useThemeStore();
   const isDark = theme === 'dark';
   const isPixel = style === 'pixel';
+  const termOpen = useLogStore((s) => s.open);
+  const termUnread = useLogStore((s) => s.unread);
+  const toggleTerm = useLogStore((s) => s.toggleOpen);
   const [tplOpen, setTplOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const tplRef = useRef<HTMLDivElement>(null);
@@ -293,6 +298,34 @@ export default function CanvasToolbar({
           title="快捷键说明"
         >
           <HelpCircle size={16} />
+        </button>
+
+        {/* 终端 */}
+        <button
+          className={`${baseBtn} ${
+            termOpen
+              ? isPixel
+                ? 'bg-[var(--px-mint)] text-[var(--px-ink)]'
+                : isDark
+                  ? 'text-emerald-300 bg-emerald-500/15'
+                  : 'text-emerald-600 bg-emerald-500/10'
+              : ''
+          }`}
+          onClick={toggleTerm}
+          title={termOpen ? '关闭终端' : `打开终端${termUnread > 0 ? ` (${termUnread} 未读)` : ''}`}
+        >
+          <TerminalIcon size={15} />
+          {!termOpen && termUnread > 0 && (
+            <span
+              className={
+                isPixel
+                  ? 'absolute -top-1 -right-1 text-[9px] leading-none px-1 py-0.5 rounded-full border-2 border-[var(--px-ink)] bg-[var(--px-pink)] text-[var(--px-ink)] font-bold'
+                  : 'absolute -top-1 -right-1 text-[9px] leading-none px-1 py-0.5 rounded bg-rose-500 text-white'
+              }
+            >
+              {termUnread}
+            </span>
+          )}
         </button>
       </div>
 

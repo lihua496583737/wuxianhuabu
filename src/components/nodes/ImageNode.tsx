@@ -7,6 +7,7 @@ import { uploadFile } from '../../services/generation';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useRunTrigger } from '../../hooks/useRunTrigger';
 import { useThemeStore } from '../../stores/theme';
+import { logBus } from '../../stores/logs';
 
 /**
  * ImageNode - 图像生成(ZhenzhenMagic)
@@ -95,13 +96,19 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     setError(null);
     const { prompt: upstreamPrompt, images: upstreamImages } = collectUpstream();
     const finalPrompt = (upstreamPrompt || localPrompt || '').trim();
+    const src = `image:${id.slice(0, 6)}`;
     if (!finalPrompt) {
       setError('未连接 text 节点也未填写 prompt');
+      logBus.error('生成中止: 缺少 prompt', src);
       return;
     }
     update({ status: 'generating', progress: '0%', error: null });
     try {
       const allRefs = [...refImages, ...upstreamImages].slice(0, modelDef.maxReferenceImages);
+      logBus.info(
+        `提交任务: model=${apiModel} 比例=${aspectRatio} 尺寸=${sizeLevel} 参考图=${allRefs.length} prompt="${finalPrompt.slice(0, 60)}${finalPrompt.length > 60 ? '…' : ''}"`,
+        src,
+      );
       const submit = await submitImageAsync({
         model: modelDef.id,
         apiModel: apiModel,
@@ -115,6 +122,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
 
       // 分支一:同步完成
       if (submit.sync && submit.urls && submit.urls.length) {
+        logBus.success(`同步返回 → ${submit.urls[0]}`, src);
         update({
           status: 'success',
           progress: '100%',
@@ -128,6 +136,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       // 分支二:异步任务 → 轮询状态(对齐主项目 gpt-image-2-web pollTask)
       const taskId = submit.taskId;
       if (!taskId) throw new Error('未获取到 taskId 且无同步结果');
+      logBus.info(`异步任务已提交 taskId=${taskId} 进入轮询…`, src);
       update({ progress: submit.progress || '5%', taskId });
       const maxPoll = 60;       // 最多 60 次
       const interval = 2000;    // 每 2 秒一次
@@ -138,11 +147,13 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         if (q.progress && q.progress !== lastProg) {
           lastProg = q.progress;
           update({ progress: q.progress });
+          logBus.debug(`[${i + 1}/${maxPoll}] status=${q.status} progress=${q.progress}`, src);
         }
         const st = String(q.status || '').toLowerCase();
         if (st === 'completed' || st === 'success' || st === 'done') {
           const url = q.urls?.[0];
           if (!url) throw new Error('任务完成但未返回图片');
+          logBus.success(`任务完成 → ${url}`, src);
           update({
             status: 'success',
             progress: '100%',
@@ -158,8 +169,10 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
       }
       throw new Error(`超时:${maxPoll * interval / 1000}s 未完成`);
     } catch (e: any) {
-      setError(e?.message || '生成失败');
-      update({ status: 'error', error: e?.message });
+      const msg = e?.message || '生成失败';
+      setError(msg);
+      logBus.error(`生成失败: ${msg}`, src);
+      update({ status: 'error', error: msg });
     }
   };
 

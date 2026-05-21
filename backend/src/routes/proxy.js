@@ -8,6 +8,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { getWhitePng } = require('../utils/whitePng');
 
 const router = express.Router();
 
@@ -63,37 +64,31 @@ function saveBase64Image(b64) {
 //  2. paramKind === 'banana-ratio'
 //     - POST /v1/images/generations (JSON) body: { model, prompt, aspect_ratio, image_size:'1K'|'2K'|'4K', image:[base64...]? }
 
-// 将 (aspectRatio + sizeLevel) 映射成 gpt-image-2 的像素串
-function aspectToGptSize(aspectRatio, sizeLevel, forEdits = false) {
+// ========== 主项目 gpt-image-2-web 完整 GPT_SIZE_MAP(line 2173)==========
+const GPT_SIZE_MAP = {
+  '1:1_1k': '1024x1024', '1:1_2k': '2048x2048', '1:1_4k': '2880x2880',
+  '3:2_1k': '1248x832',  '3:2_2k': '2496x1664', '3:2_4k': '3504x2336',
+  '2:3_1k': '832x1248',  '2:3_2k': '1664x2496', '2:3_4k': '2336x3504',
+  '4:3_1k': '1152x864',  '4:3_2k': '2304x1728', '4:3_4k': '3264x2448',
+  '3:4_1k': '864x1152',  '3:4_2k': '1728x2304', '3:4_4k': '2448x3264',
+  '5:4_1k': '1120x896',  '5:4_2k': '2240x1792', '5:4_4k': '3200x2560',
+  '4:5_1k': '896x1120',  '4:5_2k': '1792x2240', '4:5_4k': '2560x3200',
+  '16:9_1k': '1280x720', '16:9_2k': '2560x1440', '16:9_4k': '3840x2160',
+  '9:16_1k': '720x1280', '9:16_2k': '1440x2560', '9:16_4k': '2160x3840',
+  '2:1_1k': '2048x1024', '2:1_2k': '2688x1344', '2:1_4k': '3840x1920',
+  '1:2_1k': '1024x2048', '1:2_2k': '1344x2688', '1:2_4k': '1920x3840',
+  '21:9_1k': '1456x624', '21:9_2k': '3024x1296', '21:9_4k': '3696x1584',
+  '9:21_1k': '624x1456', '9:21_2k': '1296x3024', '9:21_4k': '1584x3696',
+};
+
+// 将 (aspectRatio + sizeLevel) 用主项目 GPT_SIZE_MAP 映射成像素串;Auto 返 'auto'
+function aspectToGptSize(aspectRatio, sizeLevel) {
   const ar = String(aspectRatio || '').trim();
-  const lvl = String(sizeLevel || '1K').toUpperCase();
-  const isAuto = !ar || ar === 'Auto' || ar === 'AUTO';
-  if (isAuto) return forEdits ? '1024x1024' : 'auto';
-  // 正方
-  if (ar === '1:1' || ar === '4:5' || ar === '5:4') {
-    if (forEdits) return '1024x1024';
-    if (lvl === '2K') return '2048x2048';
-    if (lvl === '4K') return '2048x2048';
-    return '1024x1024';
-  }
-  // 横向
-  if (['16:9', '3:2', '21:9', '4:3'].includes(ar)) {
-    if (forEdits) return '1536x1024';
-    if (lvl === '2K') return '2048x1152';
-    if (lvl === '4K') return '3840x2160';
-    return '1536x1024';
-  }
-  // 竖向
-  if (['9:16', '2:3', '1:2', '3:4'].includes(ar)) {
-    if (forEdits) return '1024x1536';
-    if (lvl === '2K') return '1152x2048';
-    if (lvl === '4K') return '2160x3840';
-    return '1024x1536';
-  }
-  // 极端比例低限
-  if (['1:4', '1:8'].includes(ar)) return forEdits ? '1024x1536' : '1024x1536';
-  if (['4:1', '8:1'].includes(ar)) return forEdits ? '1536x1024' : '1536x1024';
-  return forEdits ? '1024x1024' : (lvl === '2K' ? '2048x2048' : '1024x1024');
+  const lvl = String(sizeLevel || '1K').toLowerCase();
+  const isAuto = !ar || ar === 'Auto' || ar === 'AUTO' || ar === 'empty';
+  if (isAuto) return 'auto';
+  const key = `${ar}_${lvl}`;
+  return GPT_SIZE_MAP[key] || '1024x1024';
 }
 
 // 将 base64 dataURL / http(s) URL 转成 multipart Buffer
@@ -138,6 +133,102 @@ async function refToBananaImage(ref) {
   return null;
 }
 
+// ========================================================================
+// 核心 helper:完全对齐主项目 gpt-image-2-web 的上游调用
+//   - GPT2 始终走 multipart /v1/images/edits?async=true(line 2869)
+//   - 文生图时用 1024x1024 白图占位(line 2861)
+//   - GPT2 字段: prompt/model/n/quality/moderation/size(像素串)/aspectRatio(camelCase)/resolution(1k|2k|4k)
+//   - nano-banana 文生图: JSON /generations?async=true { prompt, model, aspect_ratio, image_size }
+//   - nano-banana 图生图: multipart /edits?async=true 添加 image 多个
+// ========================================================================
+async function callImageUpstreamAsync({ apiKey, finalApiModel, paramKind, prompt, n, aspect_ratio, image_size, refs, size, quality }) {
+  const upstreamBase = `${config.ZHENZHEN_BASE_URL}/v1/images`;
+  const auth = `Bearer ${apiKey}`;
+  const ar = String(aspect_ratio || '').trim();
+  const isAuto = !ar || ar === 'Auto' || ar === 'AUTO' || ar === 'empty';
+  const lvlLower = String(image_size || '1K').toLowerCase();
+  const lvlUpper = String(image_size || '2K').toUpperCase();
+  const hasRefs = Array.isArray(refs) && refs.length > 0;
+
+  // ===== GPT2 总走 multipart /edits?async=true(文生图加白图占位) =====
+  if (paramKind === 'gpt-size') {
+    const form = new FormData();
+    const px = size || aspectToGptSize(ar, lvlLower);
+    form.append('prompt', prompt);
+    form.append('model', finalApiModel);
+    form.append('n', String(n || 1));
+    form.append('quality', quality || 'auto');
+    form.append('moderation', 'auto');
+    form.append('size', px);
+    form.append('aspectRatio', isAuto ? '' : ar); // 主项目用 camelCase
+    form.append('resolution', lvlLower);          // 主项目用小写 1k/2k/4k
+
+    if (hasRefs) {
+      for (let i = 0; i < refs.length; i++) {
+        const conv = await refToBuffer(refs[i]);
+        if (!conv) continue;
+        const blob = new Blob([conv.buf], { type: conv.mime });
+        form.append('image', blob, `image_${i}.${conv.ext}`);
+      }
+    } else {
+      // 主项目 line 2861: 无参考图时创建 1024x1024 白图占位
+      const whiteBuf = getWhitePng(1024, 1024);
+      const blob = new Blob([whiteBuf], { type: 'image/png' });
+      form.append('image', blob, 'blank.png');
+    }
+
+    const url = `${upstreamBase}/edits?async=true`;
+    console.log('[upstream] GPT2 multipart → /edits?async=true model:', finalApiModel, 'size:', px, 'aspectRatio:', ar, 'resolution:', lvlLower, 'refs:', refs?.length || 0);
+    return await fetch(url, { method: 'POST', headers: { Authorization: auth }, body: form });
+  }
+
+  // ===== nano-banana 路径 =====
+  if (hasRefs) {
+    // 图生图 → multipart /edits?async=true
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('model', finalApiModel);
+    form.append('aspect_ratio', isAuto ? '1:1' : ar);
+    if (String(finalApiModel).includes('nano-banana')) form.append('image_size', lvlUpper);
+    for (let i = 0; i < refs.length; i++) {
+      const conv = await refToBuffer(refs[i]);
+      if (!conv) continue;
+      const blob = new Blob([conv.buf], { type: conv.mime });
+      form.append('image', blob, `image_${i}.${conv.ext}`);
+    }
+    const url = `${upstreamBase}/edits?async=true`;
+    console.log('[upstream] nano-banana multipart → /edits?async=true model:', finalApiModel, 'aspect_ratio:', ar, 'image_size:', lvlUpper, 'refs:', refs.length);
+    return await fetch(url, { method: 'POST', headers: { Authorization: auth }, body: form });
+  }
+  // 文生图 → JSON /generations?async=true
+  const body = { prompt, model: finalApiModel, aspect_ratio: isAuto ? '1:1' : ar };
+  if (String(finalApiModel).includes('nano-banana')) body.image_size = lvlUpper;
+  const url = `${upstreamBase}/generations?async=true`;
+  console.log('[upstream] nano-banana JSON → /generations?async=true model:', finalApiModel, 'aspect_ratio:', body.aspect_ratio, 'image_size:', body.image_size);
+  return await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: auth },
+    body: JSON.stringify(body),
+  });
+}
+
+// 将上游响应 normalize 为 { kind: 'sync'|'async', urls?, taskId? }
+async function normalizeImageResponse(data) {
+  // 如果同步返回 data:[{url|b64_json}]
+  const items = Array.isArray(data?.data) ? data.data : [];
+  if (items.length && (items[0]?.url || items[0]?.b64_json)) {
+    const urls = [];
+    for (const it of items) {
+      if (it?.b64_json) { const u = saveBase64Image(it.b64_json); if (u) urls.push(u); }
+      else if (it?.url) { const u = await saveRemoteImage(it.url); urls.push(u); }
+    }
+    return { kind: 'sync', urls };
+  }
+  // 异步任务 task_id
+  const taskId = typeof data?.data === 'string' ? data.data : (data?.task_id || data?.data?.task_id || data?.id);
+  if (taskId) return { kind: 'async', taskId };
+  return { kind: 'unknown' };
+}
+
 router.post('/image', async (req, res) => {
   const settings = loadRawSettings();
   if (!settings?.zhenzhenApiKey) {
@@ -150,87 +241,20 @@ router.post('/image', async (req, res) => {
     images, image, size, quality,
   } = req.body || {};
   if (!prompt) return res.status(400).json({ success: false, error: 'prompt 必填' });
-
-  // 推断 paramKind:apiModel 含 'nano-banana' → banana-ratio,含 'gpt-image' → gpt-size
   const m = String(apiModel || model || '');
-  const paramKind = paramKindIn || (m.includes('nano-banana') ? 'banana-ratio' : (m.includes('gpt-image') ? 'gpt-size' : 'gpt-size'));
+  const paramKind = paramKindIn || (m.includes('nano-banana') ? 'banana-ratio' : 'gpt-size');
   const finalApiModel = apiModel || model;
   if (!finalApiModel) return res.status(400).json({ success: false, error: 'model 必填' });
-
-  // 合并参考图:image(单) → images, 但以 images 为主
   const refs = Array.isArray(images) ? images.filter(Boolean) : [];
   if (typeof image === 'string' && image && !refs.includes(image)) refs.unshift(image);
-  const hasRefs = refs.length > 0;
-
-  const upstreamBase = `${config.ZHENZHEN_BASE_URL}/v1/images`;
-  const auth = `Bearer ${settings.zhenzhenApiKey}`;
 
   try {
-    let r;
-    if (paramKind === 'gpt-size' && hasRefs) {
-      // ===== gpt-image-2 图生图 → /v1/images/edits multipart =====
-      // 使用 Node 18+ 内置 FormData / Blob,fetch 自动处理 boundary
-      const form = new FormData();
-      for (let i = 0; i < refs.length; i++) {
-        const conv = await refToBuffer(refs[i]);
-        if (!conv) continue;
-        const blob = new Blob([conv.buf], { type: conv.mime });
-        form.append('image', blob, `ref_${i}.${conv.ext}`);
-      }
-      form.append('prompt', prompt);
-      form.append('model', finalApiModel);
-      const px = size || aspectToGptSize(aspect_ratio, image_size, true);
-      form.append('size', px);
-      form.append('response_format', 'b64_json');
-      if (quality && quality !== 'auto') form.append('quality', quality);
-
-      console.log('[proxy/image] GPT2 图生图 → /edits, model:', finalApiModel, 'size:', px, 'refs:', refs.length);
-      r = await fetch(`${upstreamBase}/edits`, {
-        method: 'POST',
-        headers: { Authorization: auth }, // 不手动设 Content-Type 让 fetch 加 boundary
-        body: form,
-      });
-    } else {
-      // ===== JSON 路径 (GPT2 文生图 或 nano-banana 文/图生图) =====
-      const body = {
-        model: finalApiModel,
-        prompt,
-        n: n || 1,
-        response_format: 'b64_json',
-      };
-      if (paramKind === 'gpt-size') {
-        body.size = size || aspectToGptSize(aspect_ratio, image_size, false);
-      } else {
-        // banana-ratio:aspect_ratio + image_size(等级)
-        const ar = String(aspect_ratio || '').trim();
-        const isAuto = !ar || ar === 'Auto' || ar === 'AUTO';
-        if (!isAuto) body.aspect_ratio = ar; else if (!hasRefs) body.aspect_ratio = '1:1';
-        body.image_size = String(image_size || '2K').toUpperCase();
-        if (hasRefs) {
-          const arr = [];
-          for (const f of refs) {
-            const ok = await refToBananaImage(f);
-            if (ok) arr.push(ok);
-          }
-          if (arr.length) body.image = arr;
-        }
-      }
-      if (quality && quality !== 'auto') body.quality = quality;
-
-      console.log('[proxy/image] JSON → /generations',
-        'kind:', paramKind, 'model:', finalApiModel,
-        'size:', body.size, 'aspect_ratio:', body.aspect_ratio, 'image_size:', body.image_size,
-        'refs:', body.image ? body.image.length : 0);
-      r = await fetch(`${upstreamBase}/generations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify(body),
-      });
-    }
-
+    const r = await callImageUpstreamAsync({
+      apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
+      prompt, n, aspect_ratio, image_size, refs, size, quality,
+    });
     const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
+    let data; try { data = JSON.parse(text); } catch {
       return res.status(500).json({ success: false, error: '上游响应非 JSON: ' + text.slice(0, 300) });
     }
     if (!r.ok) {
@@ -239,31 +263,17 @@ router.post('/image', async (req, res) => {
         error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`,
       });
     }
-
-    // 同步响应 (data:[{url|b64_json}])
-    const items = Array.isArray(data?.data) ? data.data : [];
-    const urls = [];
-    for (const it of items) {
-      if (it?.b64_json) {
-        const u = saveBase64Image(it.b64_json);
-        if (u) urls.push(u);
-      } else if (it?.url) {
-        const u = await saveRemoteImage(it.url);
-        urls.push(u);
-      }
+    const norm = await normalizeImageResponse(data);
+    if (norm.kind === 'sync') {
+      return res.json({ success: true, data: { urls: norm.urls, raw: data, model: finalApiModel, prompt } });
     }
-
-    // 异步任务轮询(banana / gpt-image-2 有时返 task_id)
-    if (!urls.length && (typeof data?.data === 'string' || data?.task_id || data?.data?.task_id || data?.id)) {
-      const taskId = typeof data.data === 'string' ? data.data : (data.task_id || data.data?.task_id || data.id);
-      const polled = await pollImageTask(taskId, settings.zhenzhenApiKey);
-      if (polled) urls.push(polled);
+    if (norm.kind === 'async') {
+      // 同步接口需要同步返回结果 → 内部轮询
+      const url = await pollImageTask(norm.taskId, settings.zhenzhenApiKey);
+      if (!url) return res.status(500).json({ success: false, error: '异步任务轮询超时/失败', taskId: norm.taskId });
+      return res.json({ success: true, data: { urls: [url], raw: data, taskId: norm.taskId, model: finalApiModel, prompt } });
     }
-
-    if (!urls.length) {
-      return res.status(500).json({ success: false, error: '上游未返回图片: ' + JSON.stringify(data).slice(0, 300) });
-    }
-    res.json({ success: true, data: { urls, raw: data, model: finalApiModel, prompt } });
+    return res.status(500).json({ success: false, error: '上游未返回图片也未返 task_id: ' + JSON.stringify(data).slice(0, 300) });
   } catch (e) {
     console.error('proxy/image 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });
@@ -282,75 +292,34 @@ router.post('/image/submit', async (req, res) => {
   }
   try {
     const { model, apiModel, paramKind: paramKindIn, prompt, n,
-            aspect_ratio, image_size, images, image, size } = req.body || {};
+            aspect_ratio, image_size, images, image, size, quality } = req.body || {};
     if (!prompt) return res.status(400).json({ success: false, error: 'prompt 不得为空' });
     const m = String(apiModel || model || '');
     const paramKind = paramKindIn || (m.includes('nano-banana') ? 'banana-ratio' : 'gpt-size');
     const finalApiModel = apiModel || model;
+    if (!finalApiModel) return res.status(400).json({ success: false, error: 'model 必填' });
     const refs = Array.isArray(images) ? images.filter(Boolean) : [];
     if (typeof image === 'string' && image && !refs.includes(image)) refs.unshift(image);
-    const hasRefs = refs.length > 0;
-    const auth = `Bearer ${settings.zhenzhenApiKey}`;
-    const upstreamBase = `${config.ZHENZHEN_BASE_URL}/v1/images`;
 
-    let r;
-    if (paramKind === 'gpt-size' && hasRefs) {
-      const form = new FormData();
-      for (let i = 0; i < refs.length; i++) {
-        const conv = await refToBuffer(refs[i]);
-        if (!conv) continue;
-        const blob = new Blob([conv.buf], { type: conv.mime });
-        form.append('image', blob, `ref_${i}.${conv.ext}`);
-      }
-      form.append('prompt', prompt);
-      form.append('model', finalApiModel);
-      form.append('size', size || aspectToGptSize(aspect_ratio, image_size, true));
-      form.append('response_format', 'b64_json');
-      r = await fetch(`${upstreamBase}/edits`, { method: 'POST', headers: { Authorization: auth }, body: form });
-    } else {
-      const body = { model: finalApiModel, prompt, n: n || 1, response_format: 'b64_json' };
-      const ar = String(aspect_ratio || '').trim();
-      const isAuto = !ar || ar === 'Auto' || ar === 'AUTO';
-      if (paramKind === 'gpt-size') {
-        body.size = size || aspectToGptSize(aspect_ratio, image_size, false);
-      } else {
-        if (!isAuto) body.aspect_ratio = ar; else if (!hasRefs) body.aspect_ratio = '1:1';
-        body.image_size = String(image_size || '2K').toUpperCase();
-        if (hasRefs) {
-          const arr = [];
-          for (const f of refs) { const ok = await refToBananaImage(f); if (ok) arr.push(ok); }
-          if (arr.length) body.image = arr;
-        }
-      }
-      r = await fetch(`${upstreamBase}/generations`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify(body),
-      });
-    }
-
+    // 完全对齐主项目 gpt-image-2-web:走 ?async=true,GPT2 强制 multipart edits + 白图占位
+    const r = await callImageUpstreamAsync({
+      apiKey: settings.zhenzhenApiKey, finalApiModel, paramKind,
+      prompt, n, aspect_ratio, image_size, refs, size, quality,
+    });
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
     if (!r.ok) {
       return res.status(r.status).json({ success: false, error: data?.error?.message || data?.message || `上游 HTTP ${r.status}`, raw: data });
     }
 
-    // 如果同步完成,直接返回结果
-    const items = Array.isArray(data?.data) ? data.data : [];
-    if (items.length && (items[0]?.url || items[0]?.b64_json)) {
-      const urls = [];
-      for (const it of items) {
-        if (it?.b64_json) { const u = saveBase64Image(it.b64_json); if (u) urls.push(u); }
-        else if (it?.url) { const u = await saveRemoteImage(it.url); urls.push(u); }
-      }
-      return res.json({ success: true, data: { sync: true, status: 'completed', progress: '100%', urls, raw: data } });
+    const norm = await normalizeImageResponse(data);
+    if (norm.kind === 'sync') {
+      return res.json({ success: true, data: { sync: true, status: 'completed', progress: '100%', urls: norm.urls, raw: data } });
     }
-
-    // 异步任务
-    const taskId = typeof data?.data === 'string' ? data.data : (data?.task_id || data?.data?.task_id || data?.id);
-    if (!taskId) {
-      return res.status(500).json({ success: false, error: '未获取到 task_id 且无同步结果: ' + JSON.stringify(data).slice(0, 300) });
+    if (norm.kind === 'async') {
+      return res.json({ success: true, data: { sync: false, taskId: norm.taskId, status: 'pending', progress: '0%', raw: data } });
     }
-    res.json({ success: true, data: { sync: false, taskId, status: 'pending', progress: '0%', raw: data } });
+    return res.status(500).json({ success: false, error: '未获取到 task_id 且无同步结果: ' + JSON.stringify(data).slice(0, 300) });
   } catch (e) {
     console.error('proxy/image/submit 错误:', e);
     res.status(500).json({ success: false, error: e.message || '请求失败' });

@@ -24,6 +24,7 @@ import { useRunBusStore } from '../stores/runBus';
 import { topologicalSort } from '../utils/topologicalSort';
 import * as api from '../services/api';
 import CanvasToolbar from './CanvasToolbar';
+import TerminalPanel from './TerminalPanel';
 import { useCanvasHistory } from '../hooks/useCanvasHistory';
 import type { CanvasTemplate } from '../config/canvasTemplates';
 import PlaceholderNode from './nodes/PlaceholderNode';
@@ -805,6 +806,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((v) => !v)}
       />
+      <TerminalPanel />
       <input
         ref={fileInputRef}
         type="file"
