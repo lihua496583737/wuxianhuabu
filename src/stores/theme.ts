@@ -25,8 +25,14 @@ export const useThemeStore = create<ThemeState>()(
       style: 'tech',
       toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
       setTheme: (theme) => set({ theme }),
-      toggleStyle: () => set((state) => ({ style: state.style === 'tech' ? 'pixel' : 'tech' })),
-      setStyle: (style) => set({ style }),
+      // 切换风格时联动默认模式:科技风默认深色、像素风默认浅色(切后用户仍可手动改)
+      toggleStyle: () =>
+        set((state) => {
+          const next: ThemeStyle = state.style === 'tech' ? 'pixel' : 'tech';
+          return { style: next, theme: next === 'pixel' ? 'light' : 'dark' };
+        }),
+      setStyle: (style) =>
+        set({ style, theme: style === 'pixel' ? 'light' : 'dark' }),
     }),
     {
       name: 't8-canvas-theme',

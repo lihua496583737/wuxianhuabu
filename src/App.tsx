@@ -120,18 +120,22 @@ function App() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {/* 风格切换(tech ↔ pixel) */}
+          {/* 风格切换(tech ↔ pixel)——两边都带图标+文字,各自风格化 */}
           <button
             onClick={toggleStyle}
             className={
               isPixel
                 ? 'px-btn px-btn--sm px-btn--pink'
-                : `p-2 rounded-md ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`
+                : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                    isDark
+                      ? 'bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/20'
+                      : 'bg-sky-50 border-sky-300 text-sky-700 hover:bg-sky-100'
+                  }`
             }
-            title={isPixel ? '切换到科技风' : '切换到像素风'}
+            title={isPixel ? '切换到科技风(默认深色)' : '切换到像素风(默认浅色)'}
           >
-            {isPixel ? <Cpu size={14} /> : <Sparkles size={16} />}
-            {isPixel && <span className="text-[11px]">科技风</span>}
+            {isPixel ? <Cpu size={14} /> : <Sparkles size={14} />}
+            <span className="text-[11px]">{isPixel ? '科技风' : '像素风'}</span>
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
