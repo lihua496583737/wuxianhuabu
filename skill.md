@@ -759,14 +759,20 @@ export interface FalSubmitRequest {
 本小节描述如何对齐主项目 `gpt-image-2-web/index.html` 的 Chat Tab 实现，使本项目 LLM 节点具备：5 模型 / 多模态 / 多轮历史 / 系统提示词预设 / 流式 SSE / `gpt-image-2-all` 自动出图。
 **注意：LLM 节点不提供 FAL 模式**，仅走贞贞工坊兼容 OpenAI 协议的 `/v1/chat/completions`。
 
-#### 11.10.1 起点函数与上游协议（主项目可查行号）
+> **严格复用主项目代码逻辑**（参考 memory · LLM 节点实现规范）：
+> 本节点的请求构造 / 响应解析 / 错误处理 / 流式推送 / 中止机制 / 多模态装载 / 自动出图路径，须一一对应主项目 `_doSendChat`（L8128） + `_chatAutoGenImages`（L8316）中的实现，不允许自创另一套逻辑。本文档（skill.md §11.10）为唯一权威参考。
 
-| 实现 | 主项目函数 | 起始行 | 上游接口 |
+#### 11.10.1 起点函数与上游协议（主项目 `gpt-image-2-web/index.html` 行号）
+
+| 实现 | 主项目位置 | 行号 | 上游接口 / 说明 |
 | --- | --- | --- | --- |
-| 发送一轮 chat | `_doSendChat` | L8128 | `POST {baseUrl}/v1/chat/completions` |
-| 流式 SSE 解析 | `_doSendChat` 内 reader 循环 | L8262 | `data: {choices:[{delta:{content}}]}` 行流；`data: [DONE]` 结束 |
-| 自动出图 | `_chatAutoGenImages` | L8316 | 检测 `"generate_image":[...]` JSON 块 → 调 `/v1/images/generations` |
-| 多模态 | `_doSendChat` user content | L8170 | `[{type:'text',text} | {type:'image_url',image_url:{url}}]` |
+| 发送一轮 chat | `_doSendChat` 函数声明 | L8128 | `POST {baseUrl}/v1/chat/completions` |
+| 上游 URL 拼装 | `const url = baseUrl + '/v1/chat/completions'` | L8154 | 贞贞工坊 OpenAI 兼容端点 |
+| `gpt-image-2-all` 专用非流式分支 | `if(model==='gpt-image-2-all')` | L8157 | `stream:false` 直接收取 image_url |
+| 多模态 content 解析 | `if(Array.isArray(content))` | L8170–8182 | `[{type:'text',text} | {type:'image_url',image_url:{url}} | {type:'image',image_url:{url}}]` + `data.data[].url / b64_json` |
+| 流式 SSE reader | `const reader = resp.body.getReader()` | L8269 | `data: {choices:[{delta:{content}}]}` 行流；`data: [DONE]` 结束 |
+| 流式末尾回调 | `if(msg) _chatAutoGenImages(msg)` | L8313 | 流式输出完成后起动二段出图 |
+| JSON 块二段出图 | `_chatAutoGenImages(text)` | L8316 | 正则检测 `"generate_image":[...]` JSON 块 → 调 `/v1/images/generations`（DALL·E） |
 
 #### 11.10.2 5 模型清单（前后端必须一致）
 
@@ -818,17 +824,31 @@ SSE 按行 `split('\n')` 解析；`data: [DONE]` 立即 return；`delta.content`
 4. **本地图片上传** — `<input type="file" multiple accept="image/*">` → `fileToDataUrl` → 缩略图 + ✕ 移除。
 5. **上游采集** — `collectUpstream()` 同时拾取 `prompt` 与 `imageUrl/image/url` 单图、`images[]/imageUrls[]` 多图。
 6. **多模态消息装配** — `buildMessages(text, imgs)`：`system`（如有）+ 历史轮（兼容图片轮 `LlmContentPart[]`）+ 当前 `user`（文本+图片）。
-7. **发送/中止** — 流式分支 `generateLlmStream` + `AbortController`（按钮切换为 `Square` 中止）；非流式取 `imageUrls` 写入 `data.generatedImages` 并下发到下游 image 端口。
+7. **发送/中止** — 与主项目 `_chatStreamCtrl`（L8152~L8153）对齐：节点内以 `abortRef.current = new AbortController()` 保存句柄，并把 `signal` 透传给 `generateLlmStream`；发送中按钮切换为 `Square` 中止。流式分支走 `generateLlmStream(onDelta)`；非流式（包括 `gpt-image-2-all` 和手动关闭 stream）走 `generateLlm`，取 `imageUrls` 写入 `data.generatedImages` 并下发到下游 image 端口。
 8. **总线接入** — [`useRunTrigger`](file:///e:/PenguinPravite/T8-penguin-canvas/src/hooks/useRunTrigger.ts) + [`logBus`](file:///e:/PenguinPravite/T8-penguin-canvas/src/stores/logBus.ts)（`info/success/warn/error`）。
 
 端口颜色：输入/输出 text 均使用 `PORT_COLOR.text` = `#7dd3fc`（[portTypes.ts](file:///e:/PenguinPravite/T8-penguin-canvas/src/utils/portTypes.ts)）。
 
-#### 11.10.6 `gpt-image-2-all` 特殊处理
+#### 11.10.6 「自动出图」两条互补路径
 
-* `nonStreaming: true` → UI 自动把 `stream` 强制设为 false 且禁用切换；
-* 后端非流式分支会从响应里抽 `imageUrls[]`（content 数组 / data[].url / data[].b64_json 三种来源）；
-* 节点把 `imageUrls` 写入 `data.generatedImages` 并通过 image 端口（黄色 Handle）下发；如同主项目 `_chatAutoGenImages`（L8316）行为，但更通用——不依赖 LLM 自己生成的 `generate_image` JSON 块。
-* 若需要复现主项目「LLM 输出 `"generate_image":[...]` 再调 images/generations」的二段式流程，可在节点 `handleSend` 末尾追加对返回 `content` 的正则解析（当前实现仅记 `logBus.warn` 占位）。
+主项目 chat 模块的「自动出图」实际有两条互补路径，本节点须**全部覆盖**以严格复用主项目逻辑：
+
+**路径 A：`gpt-image-2-all` 原生多模态输出**（主项目 L8157–8182）
+
+* `LLM_MODELS` 中 `nonStreaming: true` → UI 自动把 `stream` 强制设为 false 且禁用切换；
+* 后端非流式分支按主项目 L8170–8182 顺序抽取 `imageUrls[]`，三种来源严格对齐：
+  1. `content[].type === 'image_url'` → `image_url.url`
+  2. `content[].type === 'image'` → `image_url.url`
+  3. `data.data[]` → `d.url` 或 `'data:image/png;base64,' + d.b64_json`
+* 节点把 `imageUrls` 写入 `data.generatedImages` 并通过 image 端口（黄色 Handle）下发到下游 `image-output` 等节点。
+
+**路径 B：通用 LLM 输出 `"generate_image"` JSON 块 → 调 `/v1/images/generations`**（主项目 `_chatAutoGenImages` L8316，由 L8313 触发）
+
+* 适用于 GPT-4o / Gemini 等通用 LLM：模型本身不直接出图，但被系统提示词（主项目 L8140 注入）要求输出 `{"generate_image":true,"prompt":"..."}` JSON 块；
+* 流式输出完成后正则检测 `actionMatch = text.match(/"generate_image"\s*:/)`，提取 `prompt` 后调用 `/v1/images/generations`（DALL·E 兼容端点）；
+* 本节点实现状态：基础检测已就位（`logBus.warn` 提示发现 generate_image 块），二次调用 images/generations 留作可选增强；如需启用，请在 [LLMNode.tsx](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/LLMNode.tsx) `handleSend` 末尾追加调用 [generateImage](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/generation.ts) 服务，并把结果写入 `data.generatedImages`。
+
+> **规范要求**：未来扩展任何新 LLM 模型，必须先判断它属于路径 A 还是路径 B，并在 `LLM_MODELS` 注册表中以 `imageOutput` / `nonStreaming` 字段精确声明。
 
 #### 11.10.7 代码定位索引
 
