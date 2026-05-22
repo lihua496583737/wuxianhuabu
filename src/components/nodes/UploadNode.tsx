@@ -345,16 +345,16 @@ const UploadNode = ({ id, data, selected }: NodeProps) => {
                   <img
                     src={url}
                     alt={fileName}
-                    className="w-full rounded object-cover max-h-44"
-                    style={{ background: '#0008' }}
+                    className="w-full h-auto rounded block"
+                    style={{ background: '#0008', objectFit: 'contain', maxHeight: 480 }}
                   />
                 )}
                 {uploadType === 'video' && (
                   <video
                     src={url}
                     controls
-                    className="w-full rounded max-h-44"
-                    style={{ background: '#000' }}
+                    className="w-full h-auto rounded block"
+                    style={{ background: '#000', objectFit: 'contain', maxHeight: 480 }}
                   />
                 )}
                 {uploadType === 'audio' && (
