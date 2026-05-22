@@ -94,6 +94,8 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   const [pickedFiles, setPickedFiles] = useState<{ name: string; dataUrl: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
 
   const sysRef = useCallback((el: HTMLTextAreaElement | null) => attachWheelBlock(el), []);
   const userRef = useCallback((el: HTMLTextAreaElement | null) => attachWheelBlock(el), []);
@@ -293,6 +295,32 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
     setPresetMap(rest);
   };
 
+  // 双击编辑助手消息
+  const handleDoubleClickMsg = (idx: number) => {
+    const turn = history[idx];
+    if (turn?.role !== 'assistant') return;
+    setEditingIdx(idx);
+    setEditText(turn.text);
+  };
+  const handleEditBlur = () => {
+    if (editingIdx === null) return;
+    const newHistory = [...history];
+    newHistory[editingIdx] = { ...newHistory[editingIdx], text: editText };
+    // 最后一条助手消息编辑后同步更新输出
+    const lastAssistant = [...newHistory].reverse().find(t => t.role === 'assistant');
+    update({
+      history: newHistory,
+      reply: lastAssistant?.text || '',
+      prompt: lastAssistant?.text || '',
+    });
+    setEditingIdx(null);
+  };
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingIdx(null);
+    }
+  };
+
   // 接入运行总线
   useRunTrigger(id, handleSend);
 
@@ -310,7 +338,19 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
   });
 
   return (
-    <div className="flex items-start gap-0">
+    <div className="relative flex items-start gap-0">
+      {/* 输入 Handle — 固定在整体左侧 */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ background: handleColor, border: 'none', width: 10, height: 10 }}
+      />
+      {/* 输出 Handle — 固定在整体右侧（含右侧面板时在面板右缘） */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ background: handleColor, border: 'none', width: 10, height: 10 }}
+      />
     {/* 主体 */}
     <div
       ref={mainRef}
@@ -319,16 +359,6 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
       }`}
       style={{ background: 'rgba(20,20,22,.92)', backdropFilter: 'blur(8px)' }}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{ background: handleColor, border: 'none', width: 10, height: 10 }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{ background: handleColor, border: 'none', width: 10, height: 10 }}
-      />
 
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
@@ -572,8 +602,28 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
           <div key={i} className="text-[11px]">
             <div className={`text-[9px] mb-0.5 ${t.role === 'user' ? 'text-sky-300/60' : 'text-emerald-300/60'}`}>
               {t.role === 'user' ? '🧑 用户' : '🤖 助手'}
+              {t.role === 'assistant' && <span className="text-white/30 ml-1">(双击编辑)</span>}
             </div>
-            <div className="whitespace-pre-wrap text-white/80 bg-white/[0.03] rounded p-1.5">{t.text || '[空]'}</div>
+            {editingIdx === i ? (
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onBlur={handleEditBlur}
+                onKeyDown={handleEditKeyDown}
+                className="w-full resize-none rounded bg-white/10 border border-emerald-400/50 px-2 py-1.5 text-[11px] text-white outline-none focus:border-emerald-400"
+                style={{ height: mainH ? `${mainH}px` : '200px' }}
+              />
+            ) : (
+              <div
+                onDoubleClick={() => handleDoubleClickMsg(i)}
+                className={`whitespace-pre-wrap text-white/80 bg-white/[0.03] rounded p-1.5 ${
+                  t.role === 'assistant' ? 'cursor-pointer hover:bg-white/[0.06] transition-colors' : ''
+                }`}
+              >
+                {t.text || '[空]'}
+              </div>
+            )}
             {t.images && t.images.length > 0 && (
               <div className="flex gap-1 flex-wrap mt-1">
                 {t.images.map((u, j) => (
