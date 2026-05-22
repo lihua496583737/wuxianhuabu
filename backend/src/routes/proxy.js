@@ -427,6 +427,14 @@ const FAL_REGISTRY = {
     paramKind: 'nbpro-fal',
     maxRefs: 8,
   },
+  // 主项目 runGeminiFal (line 3491) 与 runNanoFal 共用同一 fal-ai/nano-banana-pro/edit 端点 + 同 paramKind。
+  // 只是 UI 控件 id 前缀不同 (g2f_* vs nf_*)。后端零增量分支，复用 nbpro-fal payload 组装。
+  'nano-banana-2-fal': {
+    endpoint: 'fal-ai/nano-banana-pro/edit',
+    editEndpoint: 'fal-ai/nano-banana-pro/edit',
+    paramKind: 'nbpro-fal',
+    maxRefs: 8,
+  },
 };
 
 // 按 16 倍数对齐(主项目 line 2904)

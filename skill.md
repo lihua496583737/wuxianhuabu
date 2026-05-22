@@ -1,7 +1,7 @@
 # T8-penguin-canvas · skill.md
 
 > 项目能力 / 接口 / 文件用途速查手册。
-> 版本：v1.0.0 ｜ 仓库：<https://github.com/T8mars/T8-penguin-canvas>
+> 版本：v1.1.0 ｜ 仓库：<https://github.com/T8mars/T8-penguin-canvas>
 
 ---
 
@@ -270,6 +270,20 @@ ReactFlow 内置：`snapToGrid={snapEnabled} snapGrid={[20, 20]}`。
 ### 全局快捷键
 `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` / `Ctrl+C` / `Ctrl+V` / `Ctrl+D` / `Ctrl+A` / `Delete` / `Backspace`。
 
+### 鼠标交互
+
+| 操作 | 效果 |
+|---|---|
+| 左键拖动空白 | 平移画布（ReactFlow 默认） |
+| **Ctrl + 左键拖动** | 框选多个节点（`selectionKeyCode=['Control','Meta']`，Mac 下 ⌘ 同效） |
+| **Ctrl + 点击节点** | 叠加多选（`multiSelectionKeyCode`） |
+| **右键点击节点 / 选区** | 弹出菜单（**组执行(N)** / 复制 / 快速复制 / 删除）|
+| 右键空白 | 关闭右键菜单 |
+| 滚轮 / 触控板 | 缩放画布 |
+| 空格 + 拖动 | 平移画布（备选） |
+
+**组执行**实现：[`Canvas.handleRunGroup(ids)`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) 调 [`runNodesByOrder(subNodes, subEdges)`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) 通用引擎 —— 仅保留所选子集**内部**的边作为依赖，拓扑排序后串行调 `runBus.triggerRun(id, 'batch')`，与全量批量运行共享 `isRunning` 状态、`batchTotal/Done` 进度、停止机制。设计思路对齐 [`PenguinPravite/components/PebblingCanvas/index.tsx`](file:///e:/PenguinPravite/components/PebblingCanvas/index.tsx) 中 `executeGroup` 的“selection 临时组 + 可执行节点顺序执行”模式。
+
 ---
 
 ## 9. 三套 API Key
@@ -408,76 +422,214 @@ Grok 参考图上传：
 - 切主模型时调 `switchMainModel()` **重置** ratio/duration/resolution 为该 kind 默认值，避免跨模型参数遗留（如从 grok 切到 veo 还带着 `2:3`）。
 - 旧画布兼容：接受 `model='veo-3.1'`/`'grok-video'` 这些旧值时 `find` 不到会退回 `VIDEO_MODELS[0]`，不报错。
 
-### 11.7 FAL 渠道接入实例（gpt-image-2-fal / nano-banana-pro-fal）
+### 11.7 FAL 渠道接入规范（后续 FAL 模型接入的唯一参考）
 
-> 严格对齐 [`gpt-image-2-web/SKILL.md` §FAL模型渠道接入规范](file:///E:/PenguinPravite/gpt-image-2-web/SKILL.md)。FAL 是**独立 Queue API**，与原 `/v1/images/*` 协议完全不同，故走**新增独立路由**（不污染原 `/image/submit`）。
+> **本节是 FAL 渠道的唯一接入规范**。任何后续 FAL 模型（无论 GPT FAL / NanoBanana FAL / Flux FAL / SDXL FAL 等）都须严格遵遵本节一部分 “协议核心” 与二部分 “零破坏三层架构”。三部分 “现有实例” 为代码参考，四部分 “接入新 FAL 子模型的 N 步法” 为可执行样板。
+>
+> 权威依据：[`gpt-image-2-web/SKILL.md` §FAL模型渠道接入规范](file:///E:/PenguinPravite/gpt-image-2-web/SKILL.md)。
+> 运行时代码：[`gpt-image-2-web/index.html`](file:///E:/PenguinPravite/gpt-image-2-web/index.html) 中 `runGPTFal` / `runNanoFal`。
+>
+> **零破坏越界：**只允许修改 FAL 相关逻辑。`/v1/images/*` 路径上的 GPT2 / nano-banana-2 / nano-banana-pro 代码、参数、调用流程**均不得变更**。
 
-#### 协议核心
+#### 一、协议核心（所有 FAL 模型通用，不得偏离）
 
-| 项 | 取值 |
-|---|---|
-| URL 前缀 | `${ZHENZHEN_BASE_URL}/fal/${endpoint}` （替换官方 `https://queue.fal.run`） |
-| 认证 | `Authorization: Bearer ${apiKey}` |
-| GPT FAL endpoint | `openai/gpt-image-2`（gen）/ `openai/gpt-image-2/edit`（edit） |
-| NBPro FAL endpoint | `fal-ai/nano-banana-pro/edit`（只有 edit） |
-| 同步返回 | `result.images[]` 直接拿 URL |
-| 异步返回 | `result.request_id` + `result.response_url` → 轮询 |
-| **response_url 域名修复** | `queue.fal.run` → `${baseUrl}/fal`，否则会走到公网 |
-| 轮询 HTTP 非 200 | body 中 `status==='IN_QUEUE'` / `'IN_PROGRESS'` 视为进行中（必须重试，不能抛错） |
-| 轮询完成 | `pd.images[]` |
-| 轮询失败 | `pd.status === 'FAILED'` / `'CANCELLED'` |
-| 自定义尺寸 | 宽高必须 **16 整数倍**，后端 `snap16()` 自动对齐 |
-| 参考图 | 上传 `${baseUrl}/v1/files` 拿 URL（复用现有 `uploadRefToZhenzhen()`） |
-
-#### 两个模型 payload 字段对照
-
-| 范畴 | gpt-image-2-fal（`runGPTFal`） | nano-banana-pro-fal（`runNanoFal`） |
+| 要素 | 取值 | 备注 |
 |---|---|---|
-| paramKind | `gpt-fal` | `nbpro-fal` |
+| URL 前缀 | `${ZHENZHEN_BASE_URL}/fal/${endpoint}` | 贞贞工坊统一代理 `https://queue.fal.run`；**严禁**直调公网 fal.run |
+| 认证 | `Authorization: Bearer ${zhenzhenApiKey}` | **重用贞贞工坊 Key**，不引入独立 FAL Key |
+| Content-Type | `application/json` | submit / query 都是 JSON |
+| 同步返回 | `result.images[]` 直接拿 URL（部分上游在 `sync_mode=true` 时会同步返） | 后端需 `saveRemoteImage()` 转存 |
+| 异步返回 | `{ request_id, response_url }` → 轮询 | response_url 需域名修复 |
+| **response_url 修复** | `queue.fal.run` → `${baseUrl}/fal` | 后端 `fixFalResponseUrl()` 在 submit 时**一次性**完成，query 不依赖前端 |
+| 轮询接口 | `GET ${responseUrl}` 或 `${baseUrl}/fal/${endpoint}/requests/${requestId}` | response_url 优先 |
+| **HTTP 非 200 处理** | body `status === 'IN_QUEUE'` / `'IN_PROGRESS'` 视为 pending，**必须重试不能抛错** | 其他才是真错误 |
+| 完成识别 | body `images[]` 非空 | 取 `images[].url` |
+| 失败识别 | body `status === 'FAILED'` 或 `'CANCELLED'` | 拋 `Error(body.error 或 status)` |
+| 自定义尺寸 | 宽高必须 **16 整数倍** | 后端 `snap16(v, 256, 3840)` 自动对齐 |
+| 参考图 | 上传 `${baseUrl}/v1/files` 拿 URL（复用现有 `uploadRefToZhenzhen()`） | 部分模型可选 base64 dataURI |
+| 轮询上限 | 前端 600 × 3s = 30min | 与视频节点一致量级 |
+
+#### 二、零破坏三层架构
+
+FAL 走**独立路由 + 独立服务 + 独立 UI 面板**，**不**与原 `/v1/images/*` 协议合街。
+
+```
+模型注册（src/providers/models.ts）
+  ├ FAL_REGISTRY[apiModel] = { endpoint, editEndpoint?, paramKind, maxRefs }
+  └ isFalModel(apiModel)  → ImageNode 入口统一判断
+         ↓
+ReactFlow 节点（src/components/nodes/ImageNode.tsx）
+  ├ isFal && falDef ：渲染 FAL 专属面板（蓝色边框）
+  ├ FAL 专属 state 字段名（falXxx / nbXxx）与原 aspectRatio/sizeLevel **完全隔离**
+  └ handleGenerate 内 if (isFal) 分支 → submitImageFal + 内置轮询
+         ↓
+服务层（src/services/generation.ts）
+  ├ submitImageFal(req: FalSubmitRequest) → FalSubmitResult
+  └ queryImageFal({ responseUrl, endpoint, requestId }) → FalQueryResult
+         ↓
+后端独立路由（backend/src/routes/proxy.js）
+  ├ POST /api/proxy/image/fal/submit —— 仅服务 FAL
+  ├ GET  /api/proxy/image/fal/query  —— 仅服务 FAL
+  ├ snap16() / fixFalResponseUrl() / FAL_REGISTRY 同名与前端一致
+  └ 同步拿到 images[] 时立即 saveRemoteImage 转存
+```
+
+**严禁在 `/api/proxy/image/submit` 内分流 fal**——FAL 参数集与原协议完全不同，混入会造成双路径同时漂移。
+
+#### 三、现有实例（gpt-image-2-fal / nano-banana-pro-fal）
+
+##### 3.1 payload 字段对照（字段名严格以主项目 `runGPTFal` / `runNanoFal` 为准）
+
+| 范畴 | gpt-image-2-fal（paramKind=`gpt-fal`） | nano-banana-pro-fal（paramKind=`nbpro-fal`） |
+|---|---|---|
+| endpoint | `openai/gpt-image-2`（gen） / `openai/gpt-image-2/edit`（edit） | `fal-ai/nano-banana-pro/edit`（只有 edit） |
 | 模式 | `mode: 'edit' \| 'gen'`（有参考图默认 edit） | 仅 edit |
-| 尺寸 | `image_size: 'auto'\|'square_hd'\|'square'\|'portrait_4_3'\|'portrait_16_9'\|'landscape_4_3'\|'landscape_16_9'` 或 `{width,height}`（custom，16倍数） | `aspect_ratio: 'auto'/'21:9'/...` + `resolution: '1K'/'2K'/'4K'` |
-| 张数 | `num_images: 1-4` | `num_images: 1-4` |
-| 质量 | `quality: 'low'/'medium'/'high'/'auto'`（默认 medium） | — |
-| 输出 | `output_format: 'png'/'jpeg'/'webp'` | `output_format` |
-| 同步开关 | `sync_mode: true`（贞贞接受时同步返） | — |
+| 尺寸 | `image_size: 'auto' \| 'square_hd' \| 'square' \| 'portrait_4_3' \| 'portrait_16_9' \| 'landscape_4_3' \| 'landscape_16_9'` 或 `{width,height}`（custom，16倍数） | `aspect_ratio: 'auto'/'21:9'/'16:9'/'3:2'/'4:3'/'5:4'/'1:1'/'4:5'/'3:4'/'2:3'/'9:16'` + `resolution: '1K' \| '2K' \| '4K'` |
+| 张数 | `num_images: 1–4` | `num_images: 1–4` |
+| 质量 | `quality: 'low' \| 'medium' \| 'high' \| 'auto'`（默认 medium） | — |
+| 输出 | `output_format: 'png' \| 'jpeg' \| 'webp'` | `output_format`（同） |
+| 同步开关 | `sync_mode: true` | — |
 | 安全 | — | `safety_tolerance: '1'(严)..'6'(松)`，默认 `'4'` |
 | 系统词 | — | `system_prompt`（可选） |
 | 联网 | — | `enable_web_search: bool` |
 | 种子 | — | `seed`（0 不传） |
-| 参考图字段 | `image_urls: string[]` 仅 edit | `image_urls: string[]`（必填） |
-| 参考图上限 | 5 | 8 |
-| 参考图编码 | URL（贞贞上传） | URL 或 base64 dataURI（`image_mode` 切换） |
+| 参考图字段 | `image_urls: string[]`（仅 edit） | `image_urls: string[]`（必填） |
+| 参考图上限 | **5** | **8** |
+| 参考图编码 | URL（贞贞上传） | URL 或 base64 dataURI（`image_mode: 'image_url' \| 'base64'`） |
 
-#### 后端分支（零破坏原则）
+##### 3.2 关键代码位置
 
-[`/api/proxy/image/fal/submit`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) 与 [`/api/proxy/image/fal/query`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) 是**新增独立路由**，与原 `/image` / `/image/submit` / `/image/status/:tid` 平行存在。
-
-- 后端 `FAL_REGISTRY` 表按 apiModel 索引 → 找到 endpoint + paramKind → 分支组装 payload。
-- 不在 `/image/submit` 内做 fal 分流，避免参数集污染（FAL 字段集和原 GPT2/nano-banana 完全不一样）。
-- `fixFalResponseUrl()` 在 submit 时立刻修域名 + 写库，query 时不再依赖前端是否替换。
-- 提交成功时若上游同步返 images[]，后端会立即 `saveRemoteImage()` 转存到 `/files/output` 并返本地相对路径，与原协议产物一致。
-
-#### 前端节点改造要点
-
-- [`isFalModel(apiModel)`](file:///e:/PenguinPravite/T8-penguin-canvas/src/providers/models.ts) 在 [ImageNode](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx) 首部统一判断 → `isFal && falDef`。
-- isFal 为 true 时：**隐藏**原“比例 + 尺寸”行，**渲染** FAL 专属面板（gpt-fal / nbpro-fal 两套），参数 store 字段独立命名（`falMode/falSize/falQuality/falN/falFormat/falSync/falCustomW/falCustomH/nbAspect/nbResolution/nbSafety/nbImgMode/nbWebSearch/nbSysPrompt/nbSeed`），与原 `aspectRatio/sizeLevel` 不冲突。
-- `handleGenerate` 内 `if (isFal && falDef) {...}` 分支独立调 `submitImageFal` + 内置轮询（600 × 3s = 30min 上限）。
-- 参考图上限同步用 `falDef?.maxRefs ?? modelDef.maxReferenceImages`。
-- **不要**在节点 UI 内 fal/非 fal 共用 setState，避免“切回标准模型时拿到上次 FAL 设置”。
-- 切 apiModel 不切 TAB（gpt-image-2-fal 仍在 GPT2 TAB；nano-banana-pro-fal 在 香蕉Pro TAB）—— 与主项目 "不新增 Tab" 原则一致。
-
-#### 关键参考位置（gpt-image-2-web/index.html）
-
-| 内容 | 行号 |
+| 内容 | 位置 |
 |---|---|
-| `runGPTFal` 全文 | line 2890-2973 |
-| `_finishFal` | line 2975-2982 |
-| `_toggleFalPanel` / `_toggleFalCustomSize` | line 2887-2888 |
-| `gf_panel` HTML（gpt FAL 控件） | line 1069-1080 |
-| `runNanoFal` 全文 | line 3587-3679 |
-| `nano_fal_panel` HTML | line 1154-1173 |
-| `uploadFileToAPI` | line 3104 |
-| FAL 渠道接入规范文档 | SKILL.md line 264-307 |
+| 后端 FAL 路由双件 | [`backend/src/routes/proxy.js §/image/fal/submit + /image/fal/query`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) |
+| 前端服务函数 | [`src/services/generation.ts §submitImageFal + queryImageFal`](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/generation.ts) |
+| FAL 注册表 + 枚举 | [`src/providers/models.ts §FAL_REGISTRY / FalParamKind / isFalModel / GPT_FAL_SIZES / NBPRO_FAL_RATIOS / NBPRO_FAL_RESOLUTIONS`](file:///e:/PenguinPravite/T8-penguin-canvas/src/providers/models.ts) |
+| 节点 UI 两套面板 | [`src/components/nodes/ImageNode.tsx §isFal && falDef`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx) |
+| 主项目参考 | `gpt-image-2-web/index.html` `runGPTFal` line 2890–2973、`runNanoFal` line 3587–3679、`uploadFileToAPI` line 3104、`gf_panel` HTML line 1069–1080、`nano_fal_panel` HTML line 1154–1173 |
+
+### 11.8 接入新 FAL 子模型的 N 步法（样板）
+
+> 适用场景：后续需要接入**任何一个新 FAL 模型**（例如 `flux-pro-fal` / `seedream-fal` / `recraft-fal` / `imagen3-fal` 等）。以下是可执行清单，**严禁跳步骤**。
+
+#### Step 0：拿取官方参考
+
+1. 查 [fal.ai 官方页](https://fal.ai/models) 拿到：
+   - **endpoint slug**（如 `fal-ai/flux-pro/v1.1`，去掉 `https://queue.fal.run/` 前缀）
+   - 是否有独立 `/edit` 变体
+   - 请求 payload 完整字段表
+   - 返回体中 `images[]` 位置是否主流（如 `images[0].url`）
+2. 查主项目 `gpt-image-2-web/index.html` 是否已实现过（`grep_code` 搜 `"fal-ai/<模型名>"`）——优先拿主项目运行时代码作为准则。
+
+#### Step 1：在注册表增加一项
+
+```ts
+// src/providers/models.ts
+export const FAL_REGISTRY: Record<string, FalEndpointDef> = {
+  'gpt-image-2-fal': { ... },
+  'nano-banana-pro-fal': { ... },
+  // 新增
+  'flux-pro-fal': {
+    endpoint: 'fal-ai/flux-pro/v1.1',
+    editEndpoint: 'fal-ai/flux-pro/v1.1/redux',  // 如有独立 edit 才填
+    paramKind: 'flux-fal',                        // 新 paramKind
+    maxRefs: 4,                                   // 上限 = 官方限制
+  },
+};
+```
+
+同步增加枚举常量（参考 `GPT_FAL_SIZES` / `NBPRO_FAL_RATIOS`）——**独立名命名**不复用原有常量。
+
+#### Step 2：在 nano-banana-pro / gpt-image-2 的 apiModelOptions 加子选项
+
+```ts
+// src/providers/models.ts —— 加到合适的主模型 TAB 下，**不新增 Tab**
+IMAGE_MODELS【主模型】.apiModelOptions.push({
+  value: 'flux-pro-fal',
+  label: 'flux-pro-fal'  // 询问项目内部名。遵守设置：gpt-image-2 三档为 'gpt-image-2-all' / 'gpt-image-2' / 'gpt-image-2-fal'
+});
+```
+
+#### Step 3：后端 `proxy.js` 加 paramKind 分支
+
+在 [`POST /image/fal/submit`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) 内现有 `if (paramKind === 'gpt-fal')` / `else if (paramKind === 'nbpro-fal')` 后追加一个 `else if (paramKind === 'flux-fal') { ... }`。
+
+```js
+else if (paramKind === 'flux-fal') {
+  payload = {
+    prompt: prompt,
+    num_images: clamp(n, 1, 4),
+    image_size: size,
+    enable_safety_checker: true,
+    output_format: format,
+    // 有参考图走 redux endpoint
+    ...(image_urls.length ? { image_url: image_urls[0] } : {}),
+  };
+  if (image_urls.length) endpoint = def.editEndpoint;
+}
+```
+
+**禁止**在其他 paramKind 分支上修改现有字段拼装 —— 零破坏。
+
+#### Step 4：前端服务 `submitImageFal` 准许新字段
+
+[`src/services/generation.ts §FalSubmitRequest`](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/generation.ts) 加可选字段：
+
+```ts
+export interface FalSubmitRequest {
+  // ... 已有
+  // flux-fal 专属
+  enable_safety_checker?: boolean;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+}
+```
+
+#### Step 5：节点 UI 加 paramKind 面板
+
+[`src/components/nodes/ImageNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/ImageNode.tsx) 中原有：
+
+```tsx
+{isFal && falKind === 'gpt-fal' && (<GptFalPanel ... />)}
+{isFal && falKind === 'nbpro-fal' && (<NbproFalPanel ... />)}
+```
+
+加一项：
+
+```tsx
+{isFal && falKind === 'flux-fal' && (
+  // 独立 state字段名：fluxXxx，不与 falXxx/nbXxx 冲突
+  // 参考图上限 falDef.maxRefs
+  // 返回后走同一轮询 queryImageFal
+)}
+```
+
+**绝对禁止**复用 falXxx 或 nbXxx 字段名，否则切 apiModel 时会携带上一个模型的设置（历史 bug。。）。
+
+#### Step 6：验收清单（必跑）
+
+1. `npx tsc --noEmit` 无错。
+2. `node -e "require('./src/routes/proxy.js')"` 输出 OK。
+3. 启动 `npm run dev`，选择新模型，提交后**上游后台能看到异步任务**（贞贞工坊控制台 · 任务类型=fal queue）。
+4. 轮询能拿到 `images[]`，节点转存后显示本地 `/files/output/...` URL。
+5. 双主题（科技 / 像素）的 FAL 面板都能正常点击 / 输入 / 复位。
+6. 切回原标准模型（`gpt-image-2` / `nano-banana-2` / `nano-banana-pro`），原“比例 + 尺寸” UI 能正常显示，参数不串。
+
+#### Step 7：同步 features.json
+
+- 在 `modelRegistry.image[]` 添加一项： `{ id, label, provider: 'zhenzhen-fal', endpoint: '/fal/<endpoint>', paramKind, maxRefs }`
+- 在 `phases` 添加一个新阶段项以锁住交付。
+
+#### 常见陷阱清单
+
+| 错误 | 表现 | 修法 |
+|---|---|---|
+| 用 `/v1/images/generations` 调 FAL | 400 “model not found” | 改走 `${baseUrl}/fal/${endpoint}` |
+| 忘了修 response_url 域名 | 轮询走公网 fal.run 全安被拦 / 401 | submit 时 `fixFalResponseUrl()` 改为 `${baseUrl}/fal` |
+| HTTP 200 外直接拋错 | 节点“任务取消”，但实际上游还在开始排队 | body `IN_QUEUE/IN_PROGRESS` 视为进行中重试 |
+| 自定义尺寸被上游拒 | 400 “width must be multiple of 16” | snap16(v, 256, 3840) |
+| 参考图走 nbpro-fal 却超过 8 张 | 400 “too many image_urls” | UI 上限走 `falDef.maxRefs` 动态限制 |
+| 子模型划入错误的 TAB | UI 主模型在 nbpro 却拿到 gpt-fal 参数 | apiModel 选项需被初始化子选项继承主模型 TAB |
+| 带走上个 FAL 模型参数 | 切 nbpro-fal 发现 num_images=4 / safety=4 什么都不动 | falXxx / nbXxx state 字段名**不能复用** |
 
 ---
 

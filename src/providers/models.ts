@@ -72,6 +72,7 @@ export const IMAGE_MODELS: ImageModelDef[] = [
     capabilities: ['t2i', 'i2i'],
     apiModelOptions: [
       { value: 'nano-banana-2', label: 'nano-banana-2 (Flash)' },
+      { value: 'nano-banana-2-fal', label: 'nano-banana-2-fal' },
     ],
     aspectRatios: BANANA_FLASH_RATIOS,
     defaultAspectRatio: '1:1',
@@ -127,7 +128,7 @@ export interface FalEndpointDef {
   maxRefs: number;
 }
 
-/** 按 apiModel(如 'gpt-image-2-fal' / 'nano-banana-pro-fal')索引 */
+/** 按 apiModel(如 'gpt-image-2-fal' / 'nano-banana-pro-fal' / 'nano-banana-2-fal')索引 */
 export const FAL_REGISTRY: Record<string, FalEndpointDef> = {
   'gpt-image-2-fal': {
     endpoint: 'openai/gpt-image-2',
@@ -137,6 +138,15 @@ export const FAL_REGISTRY: Record<string, FalEndpointDef> = {
   },
   'nano-banana-pro-fal': {
     // nano-banana-pro FAL 只对外提供 edit 端点(主项目 line 3623)
+    endpoint: 'fal-ai/nano-banana-pro/edit',
+    editEndpoint: 'fal-ai/nano-banana-pro/edit',
+    paramKind: 'nbpro-fal',
+    maxRefs: 8,
+  },
+  // 主项目 runGeminiFal(line 3491) 与 runNanoFal 共用同一个 fal-ai/nano-banana-pro/edit 端点,
+  // 参数集与 nbpro-fal 完全一致(g2f_* 与 nf_* 仅是 UI 控件 id 前缀差异),
+  // 所以复用 nbpro-fal paramKind / maxRefs=8 。
+  'nano-banana-2-fal': {
     endpoint: 'fal-ai/nano-banana-pro/edit',
     editEndpoint: 'fal-ai/nano-banana-pro/edit',
     paramKind: 'nbpro-fal',

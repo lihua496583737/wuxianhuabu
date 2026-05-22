@@ -170,6 +170,7 @@
       { "id": "gpt-image-2", "label": "GPT Image 2", "provider": "zhenzhen", "endpoint": "/v1/images/generations" },
       { "id": "gpt-image-2-fal", "label": "GPT Image 2 (FAL)", "provider": "zhenzhen-fal", "endpoint": "/fal/openai/gpt-image-2[/edit]", "paramKind": "gpt-fal", "maxRefs": 5 },
       { "id": "nano-banana-2", "label": "Nano Banana 2", "provider": "zhenzhen", "endpoint": "/v1/images/generations" },
+      { "id": "nano-banana-2-fal", "label": "Nano Banana 2 (FAL)", "provider": "zhenzhen-fal", "endpoint": "/fal/fal-ai/nano-banana-pro/edit", "paramKind": "nbpro-fal", "maxRefs": 8 },
       { "id": "nano-banana-pro", "label": "Nano Banana Pro", "provider": "zhenzhen", "endpoint": "/v1/images/generations" },
       { "id": "nano-banana-pro-fal", "label": "Nano Banana Pro (FAL)", "provider": "zhenzhen-fal", "endpoint": "/fal/fal-ai/nano-banana-pro/edit", "paramKind": "nbpro-fal", "maxRefs": 8 }
     ],
