@@ -297,6 +297,18 @@ html[data-theme-style="pixel"] .react-flow__node-llm .llm-chat-panel {
   backdrop-filter: none !important;
   color: var(--px-ink) !important;
 }
+/* LLM 节点主体面板(像素风适配 —— flex wrapper 下的子 div) */
+html[data-theme-style="pixel"] .react-flow__node-llm > div:first-child > div {
+  background: var(--px-surface) !important;
+  background-color: var(--px-surface) !important;
+  background-image: none !important;
+  border: var(--px-border-w) solid var(--px-ink) !important;
+  border-radius: var(--px-radius-card) !important;
+  box-shadow: var(--px-shadow-hard) !important;
+  backdrop-filter: none !important;
+  color: var(--px-ink) !important;
+  font-family: var(--px-font-display) !important;
+}
 
 /* 节点内部文本颜色多重保底(text-white 、 text-zinc-*、 text-white/x ) */
 html[data-theme-style="pixel"] .react-flow__node .text-white,
