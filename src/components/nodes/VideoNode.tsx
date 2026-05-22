@@ -247,7 +247,7 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
             onChange={(e) => switchMainModel(e.target.value)}
             className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
           >
-            {VIDEO_MODELS.map((m) => (
+            {VIDEO_MODELS.filter((m) => m.kind !== 'seedance').map((m) => (
               <option key={m.id} value={m.id} className="bg-zinc-900">{m.label}</option>
             ))}
           </select>
