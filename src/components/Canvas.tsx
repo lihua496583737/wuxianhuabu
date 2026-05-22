@@ -2099,7 +2099,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         const COLOR_HEX: Record<string, string> = {
           sky: '#7dd3fc', amber: '#fcd34d', rose: '#fda4af', fuchsia: '#f0abfc',
           violet: '#c4b5fd', emerald: '#6ee7b7', cyan: '#67e8f9', indigo: '#a5b4fc',
-          orange: '#fdba74', pink: '#f9a8d4', slate: '#cbd5e1',
+          orange: '#fdba74', pink: '#f9a8d4', slate: '#cbd5e1', teal: '#5eead4',
         };
         const itemCls = isPixel
           ? 'w-full text-left px-3 py-2 text-[12px] flex items-center gap-2 hover:bg-[var(--px-yellow)]'

@@ -28,6 +28,7 @@ const COLOR_HEX: Record<string, string> = {
   indigo: '#a5b4fc',
   orange: '#fdba74',
   pink: '#f9a8d4',
+  teal: '#5eead4',
   slate: '#cbd5e1',
 };
 
