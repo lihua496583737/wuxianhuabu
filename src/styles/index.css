@@ -104,6 +104,31 @@ body,
   scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
 
+/* === xyflow Handle 交互优化 === */
+/* 1. 默认光标从 grab(手掌) 改为 crosshair(十字准星),
+      更直观地提示「拖拽连线」动作 (与拖动节点本体区分开) */
+.react-flow__handle {
+  cursor: crosshair !important;
+}
+.react-flow__handle:hover {
+  /* hover 亦保持 crosshair, 避免 xyflow 内置 :hover 样式反转为 grab */
+  cursor: crosshair !important;
+}
+/* 2. 扩大 hit area: 透明 ::before 伪元素定位到四周外扩 8px,
+      接收鼠标事件 (点击 / hover / 拖拽起点), 视觉 handle 本体不变
+      (.react-flow__handle 本身已是 position:absolute, 伪元素以其为定位基准) */
+.react-flow__handle::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: 9999px;
+  background: transparent;
+  /* 不设 pointer-events: 默认继承 auto, 与本体一起接收事件 */
+}
+
 /* === SHIFT 批量移线交互反馈 === */
 /* 按住 SHIFT 时,所有 handle 显示 grab 光标,提示可批量拖拽迁移连线 */
 body.shift-mode .react-flow__handle {

@@ -497,6 +497,15 @@ html[data-theme-style="pixel"] .react-flow__handle {
   border-radius: 2px !important;
   border: 2px solid var(--px-ink) !important;
   background: var(--px-yellow) !important;
+  /* 像素风专属光标: cell (方格+十字), 比 crosshair 更贴近像素肉眼 */
+  cursor: cell !important;
+}
+html[data-theme-style="pixel"] .react-flow__handle:hover {
+  cursor: cell !important;
+}
+/* 像素风下 hit area 扩散改方形升级 (区别于科技风圆形) */
+html[data-theme-style="pixel"] .react-flow__handle::before {
+  border-radius: 0 !important;
 }
 html[data-theme-style="pixel"] .react-flow__handle.target {
   background: var(--px-mint) !important;
