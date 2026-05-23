@@ -66,6 +66,33 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   // 订阅上游节点的 data, 任何上游 data 变化都会触发重渲染
   const upstreamNodes = useNodesData(upstreamIds);
 
+  // 细粒度字段签名: 防止 xyflow useNodesData 返回引用稳定导致 useMemo 漏重算;
+  // 纯字符串变化 React 可靠跟踪，上游任何一个被迫关心的字段变动均会重算 collected。
+  const upstreamSig = useMemo(() => {
+    const list = Array.isArray(upstreamNodes) ? upstreamNodes : [];
+    return list
+      .map((n: any) => {
+        const ud = n?.data || {};
+        const arr1 = Array.isArray(ud.imageUrls) ? ud.imageUrls.join(',') : '';
+        const arr2 = Array.isArray(ud.urls) ? ud.urls.join(',') : '';
+        const arr3 = Array.isArray(ud.generatedImages) ? ud.generatedImages.join(',') : '';
+        return [
+          n?.id || '',
+          ud.outputText || '',
+          ud.reply || '',
+          ud.prompt || '',
+          ud.text || '',
+          ud.imageUrl || '',
+          ud.videoUrl || '',
+          ud.audioUrl || '',
+          arr1,
+          arr2,
+          arr3,
+        ].join('§');
+      })
+      .join('|');
+  }, [upstreamNodes]);
+
   const collected = useMemo<Collected>(() => {
     const out: Collected = { texts: [], images: [], videos: [], audios: [] };
 
@@ -159,7 +186,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     }
 
     return out;
-  }, [upstreamNodes, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directAudioUrl]);
+  }, [upstreamNodes, upstreamSig, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls, d.directVideoUrl, d.directAudioUrl]);
 
   // 文本编辑
   const overrideText: string = typeof d.outputText === 'string' ? d.outputText : '';

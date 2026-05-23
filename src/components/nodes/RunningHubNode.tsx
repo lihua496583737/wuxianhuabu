@@ -96,7 +96,11 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
     update({ paramValues: next });
   };
 
-  // 对于勾选「从上游自动获取」的媒体字段，随上游节点 url 变化同步回填
+  // 对于媒体类字段，随上游节点 url 变化同步回填：
+  //   - sourceFromUpstream === true   → 已启用，连续跟进
+  //   - sourceFromUpstream === undefined → 用户从未交互过（包括拉取后只填了默认 fieldValue），
+  //                                       一旦上游出现对应 url → 自动启用 + 填值（避免用户漏勾导致提交默认值）
+  //   - sourceFromUpstream === false  → 用户主动取消过，不动
   useEffect(() => {
     const list: any[] = appInfo?.nodeInfoList;
     if (!Array.isArray(list) || list.length === 0) return;
@@ -107,10 +111,17 @@ const RunningHubNode = ({ id, data, selected }: NodeProps) => {
       if (vt !== 'image' && vt !== 'video' && vt !== 'audio') continue;
       const k = paramKey(it.nodeId, it.fieldName);
       const cur = next[k];
-      if (!cur?.sourceFromUpstream) continue;
-      const u = findUpstreamUrl(vt);
-      if (u && u !== cur.value) {
-        next[k] = { ...cur, value: u };
+      const upUrl = findUpstreamUrl(vt);
+      if (!upUrl) continue;
+      if (cur?.sourceFromUpstream === false) continue; // 用户主动关闭
+      if (cur?.sourceFromUpstream === true) {
+        if (upUrl !== cur.value) {
+          next[k] = { ...cur, value: upUrl };
+          changed = true;
+        }
+      } else {
+        // undefined → 首次看到上游，自动启用
+        next[k] = { value: upUrl, sourceFromUpstream: true };
         changed = true;
       }
     }
