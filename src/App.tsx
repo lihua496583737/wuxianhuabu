@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cpu, Cloud, ExternalLink, Copy, Check, Gift, Heart } from 'lucide-react';
+import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cpu, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { useApiKeysStore } from './stores/apiKeys';
 import Sidebar from './components/Sidebar';
@@ -22,6 +22,9 @@ function App() {
   const [cloudOpen, setCloudOpen] = useState(false);
   const [wxCopied, setWxCopied] = useState(false);
   const cloudWrapRef = useRef<HTMLDivElement>(null);
+  // 「视频教程」推广浮层开关
+  const [videoOpen, setVideoOpen] = useState(false);
+  const videoWrapRef = useRef<HTMLDivElement>(null);
   // 画布接收节点添加的 ref(从 Sidebar -> Canvas)
   const addNodeRef = useRef<((type: NodeType) => void) | null>(null);
 
@@ -42,6 +45,24 @@ function App() {
       document.removeEventListener('keydown', onKey);
     };
   }, [cloudOpen]);
+
+  // 「视频教程」浮层: 点击容器外部 / 按 ESC 自动关闭
+  useEffect(() => {
+    if (!videoOpen) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (!videoWrapRef.current) return;
+      if (!videoWrapRef.current.contains(e.target as Node)) setVideoOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVideoOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [videoOpen]);
 
   const handleCopyWx = async () => {
     try {
@@ -185,6 +206,131 @@ function App() {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* 「视频教程」推广按钮: 与右侧【在线画布/主题/风格】同款胶囊, 主调 红色(B 站 / Youtube 调性) */}
+          <div ref={videoWrapRef} className="relative">
+            <button
+              onClick={() => setVideoOpen((v) => !v)}
+              className={
+                isPixel
+                  ? `px-btn px-btn--sm ${videoOpen ? 'px-btn--mint' : 'px-btn--pink'}`
+                  : `flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                      isDark
+                        ? videoOpen
+                          ? 'bg-rose-500/20 border-rose-400/50 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'
+                        : videoOpen
+                          ? 'bg-rose-100 border-rose-400 text-rose-800'
+                          : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                    }`
+              }
+              title="视频教程 · 关注 T8 获取免费版本更新"
+            >
+              <PlayCircle size={14} />
+              <span className="text-[11px]">视频教程</span>
+            </button>
+
+            {/* 推广浮层 */}
+            {videoOpen && (
+              <div
+                className={
+                  isPixel
+                    ? 'absolute right-0 top-full mt-2 z-[60] w-[320px] px-panel p-3 animate-[fadeIn_.18s_ease-out]'
+                    : `absolute right-0 top-full mt-2 z-[60] w-[320px] rounded-xl p-3 border shadow-2xl backdrop-blur-md animate-[fadeIn_.18s_ease-out] ${
+                        isDark
+                          ? 'bg-zinc-900/95 border-rose-400/20 shadow-rose-500/10'
+                          : 'bg-white/95 border-rose-200 shadow-rose-500/10'
+                      }`
+                }
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* 标题 */}
+                <div className={`flex items-center gap-2 ${isPixel ? '' : isDark ? 'text-rose-300' : 'text-rose-700'}`}>
+                  <PlayCircle size={16} className={isPixel ? '' : 'shrink-0'} />
+                  <span className={`text-sm font-bold ${isPixel ? 'px-title' : ''}`}>视频教程 · T8老师</span>
+                </div>
+
+                {/* 副标 */}
+                <div
+                  className={`mt-2 text-[12px] leading-relaxed ${
+                    isPixel ? '' : isDark ? 'text-white/80' : 'text-zinc-700'
+                  }`}
+                >
+                  跳转以下平台观看本画布与最新 AI 教程～
+                </div>
+
+                {/* B 站 跳转按钮 */}
+                <a
+                  href="https://space.bilibili.com/385085361"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setVideoOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-3 px-btn px-btn--pink w-full justify-center'
+                      : `mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-gradient-to-r from-pink-500/20 to-rose-500/20 border-pink-400/40 text-pink-200 hover:from-pink-500/30 hover:to-rose-500/30 hover:border-pink-400/60 hover:shadow-[0_0_16px_rgba(236,72,153,0.35)]'
+                            : 'bg-gradient-to-r from-pink-500 to-rose-500 border-rose-600 text-white hover:from-pink-600 hover:to-rose-600 hover:shadow-lg'
+                        }`
+                  }
+                >
+                  {/* 小伊主机图标(荷包未内置专用 B 站 logo, 用 PlayCircle + “B” 文字代替) */}
+                  <span
+                    className={
+                      isPixel
+                        ? 'inline-flex items-center justify-center w-4 h-4 rounded-sm bg-white text-black text-[10px] font-black border border-black'
+                        : 'inline-flex items-center justify-center w-4 h-4 rounded-sm bg-white text-rose-600 text-[10px] font-black'
+                    }
+                  >
+                    B
+                  </span>
+                  <span>在 B 站订阅（新窗口打开）</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* YouTube 跳转按钮 */}
+                <a
+                  href="https://space.bilibili.com/385085361"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setVideoOpen(false)}
+                  className={
+                    isPixel
+                      ? 'mt-2 px-btn px-btn--ghost w-full justify-center border-2 border-black'
+                      : `mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          isDark
+                            ? 'bg-red-500/10 border-red-500/40 text-red-300 hover:bg-red-500/20 hover:border-red-400/60 hover:shadow-[0_0_16px_rgba(239,68,68,0.3)]'
+                            : 'bg-red-50 border-red-400 text-red-700 hover:bg-red-100'
+                        }`
+                  }
+                >
+                  <Youtube size={14} className={isPixel ? '' : 'shrink-0'} />
+                  <span>在 YouTube 订阅（新窗口打开）</span>
+                  <ExternalLink size={11} className="opacity-70" />
+                </a>
+
+                {/* 关注提示 */}
+                <div
+                  className={`mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed ${
+                    isPixel ? '' : isDark ? 'text-white/70' : 'text-zinc-600'
+                  }`}
+                >
+                  <Bell
+                    size={11}
+                    className={`mt-0.5 shrink-0 ${
+                      isPixel ? '' : isDark ? 'text-amber-300' : 'text-amber-600'
+                    }`}
+                  />
+                  <span>
+                    记得关注 <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>T8</span>，随时获取
+                    <span className={isPixel ? 'font-bold' : `font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}> 免费版本更新 </span>
+                    及最新 AI 教程。
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 「在线画布」推广按钮: 与右侧主题/风格按钮同款外观, 点击展开浮层 */}
           <div ref={cloudWrapRef} className="relative">
             <button
