@@ -145,6 +145,24 @@ body.bulk-reconnecting .react-flow__handle {
 }
 
 /* === SHIFT 剩刀划线断连模式 === */
+/* 预览态(仅按住 SHIFT, 未拖动): 在画布空白 / GroupBoxNode 本体 光标预点为剩刀,
+   让用户一眼看出「在这里拖动可划断连线」, 避免默认 grab 手掌误导为 panning */
+body.shift-mode .react-flow__pane {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%23EF4444' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='6' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><line x1='20' y1='4' x2='8.12' y2='15.88'/><line x1='14.47' y1='14.48' x2='20' y2='20'/><line x1='8.12' y1='8.12' x2='12' y2='12'/></svg>") 14 14, crosshair !important;
+}
+body.shift-mode .react-flow__node-groupBox {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%23EF4444' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='6' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><line x1='20' y1='4' x2='8.12' y2='15.88'/><line x1='14.47' y1='14.48' x2='20' y2='20'/><line x1='8.12' y1='8.12' x2='12' y2='12'/></svg>") 14 14, crosshair !important;
+}
+/* 组节点内交互元素 SHIFT 期间仍保持各自语义光标, 避免被剩刀覆盖 */
+body.shift-mode .react-flow__node-groupBox button {
+  cursor: pointer !important;
+}
+body.shift-mode .react-flow__node-groupBox input,
+body.shift-mode .react-flow__node-groupBox textarea,
+body.shift-mode .react-flow__node-groupBox [contenteditable="true"] {
+  cursor: text !important;
+}
+/* 实际拖动后进入 cut-mode, 全局全接管为剩刀(下面原规则) */
 /* 触发: SHIFT + 画布空白 / GroupBoxNode 空白 左键拖动
    - body.cut-mode 期间全局光标变为剩刀(双主题不同颜色)
    - .cut-marked 表示被划过的 edge, 红色高亮预览
