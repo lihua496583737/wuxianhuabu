@@ -73,10 +73,12 @@ html[data-theme-style="pixel"] {
   --px-shadow-soft: 0 2px 0 var(--px-ink);
 
   /* 字体 */
-  --px-font-display: "M PLUS Rounded 1c", "DotGothic16", "Noto Sans SC",
-    "PingFang SC", system-ui, sans-serif;
-  --px-font-pixel: "DotGothic16", "Press Start 2P", "M PLUS Rounded 1c",
-    monospace;
+  /* 中文优先：将日文像素字体(DotGothic16)与英文像素字体(Press Start 2P)置于末位， */
+  /* 避免中文逐字回退造成字号参差不齐问题。 */
+  --px-font-display: "M PLUS Rounded 1c", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", system-ui, "DotGothic16", sans-serif;
+  --px-font-pixel: "M PLUS Rounded 1c", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", "DotGothic16", "Press Start 2P", monospace;
 }
 
 /* ===========================================
@@ -664,7 +666,7 @@ html[data-theme-style="pixel"] .img-edit-overlay {
   backdrop-filter: none;
 }
 html[data-theme-style="pixel"] .img-edit-modal {
-  font-family: var(--px-font-rounded);
+  font-family: var(--px-font-display);
   border-radius: 0 !important;
 }
 html[data-theme-style="pixel"] .img-edit-stage img {
