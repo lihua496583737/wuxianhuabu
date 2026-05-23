@@ -4247,3 +4247,317 @@ features.json 末尾 `shortcuts` 段已记录 14 项，本次审计 [Canvas.tsx]
 
 ---
 
+## 44. Electron 打包 + T8ENC1 加密规范（v1.1.0 / 2026-05-23）
+
+本章是 T8-penguin-canvas **首次桌面化打包**的完整规范，对应 features.json `phase26`。设计上**参考但不照搬** `gpt-image-2-web` 项目（Python+Electron+ZZENC1+py_compile），针对本项目 **Node.js + Express + Vite/React** 体系单独裁剪：
+
+| 维度 | 参考项目 gpt-image-2-web | 本项目 T8-penguin-canvas |
+|------|--------------------------|---------------------------|
+| 后端语言 | Python (Flask) | Node.js (Express) |
+| 运行时 | python-embed-3.10 解压到 resources/ | Electron 内置 Node.js（无需额外解释器） |
+| 加密前编译 | `py_compile` → `.pyc` | `bytenode.compileFile` → `.jsc`（V8 字节码） |
+| 加密 magic | `ZZENC1\n` | `T8ENC1\n` |
+| 加密算法 | XOR + base64 + SHA256 衍生 key | AES-256-CBC + 16B 随机 IV + SHA256 衍生 key |
+| 启动方式 | spawn python.exe + 子进程 | 同进程 `require('./loader')` 后 `require` 加密入口 |
+| 前端托管 | Flask 静态 | Express `express.static(dist)` + SPA fallback |
+| 数据目录 | resources/ 同级 | `app.getPath('userData')` |
+
+### 44.1 文件总览
+
+```
+electron/
+├─ main.cjs           主进程：端口探测 / 启动 logWindow / 加载 loader / require 加密入口 / 创建 BrowserWindow loadURL
+├─ preload.cjs        contextBridge 暴露 t8pc.getInfo() (packaged/port/userData/version)
+├─ loader.cjs         运行时 T8ENC1 解密 + bytenode .jsc 加载 + Module._resolveFilename 自动尝试 .t8c 后缀
+├─ encrypt.cjs        打包前：walk backend/src/**/*.js → rewriteRequires('./x' → './x.t8c') → bytenode.compileFile → encryptBuffer → build/backend-enc/<rel>.t8c
+└─ _post_build.cjs    打包后：核验 dist_electron/win-unpacked/resources/backend-enc/*.t8c + frontend/index.html，强制清除可能混入的明文 backend/src
+```
+
+> ⚠️ 本项目根 `package.json` 设置了 `"type": "module"`，所有 Electron 主进程脚本必须用 `.cjs` 后缀（CommonJS），否则 Node 会按 ESM 解析导致 `require is not defined`。
+
+### 44.2 T8ENC1 加密格式
+
+```
+┌────────────┬──────────────┬───────────────────────────────────────┐
+│ 7B Magic   │ 16B IV       │ AES-256-CBC 密文 (V8 字节码 .jsc 内容) │
+│ T8ENC1\n   │ randomBytes  │ ...                                    │
+└────────────┴──────────────┴───────────────────────────────────────┘
+```
+
+- **Magic Header**：`Buffer.from('T8ENC1\n', 'utf8')`，7 bytes，便于 hex 工具一眼识别
+- **Key 派生**：`crypto.createHash('sha256').update('T8-penguin-canvas-T8star-2026').digest()` → 32 字节 AES key
+- **IV**：每次加密 `crypto.randomBytes(16)`，内嵌于密文头，**避免相同明文产出相同密文**（XOR 方案做不到）
+- **算法**：AES-256-CBC（[loader.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/loader.cjs#L33-L48)）
+
+核心函数（必须 main / encrypt / loader 三处保持完全一致）：
+
+```js
+const MAGIC = Buffer.from('T8ENC1\n', 'utf8');
+const KEY = crypto.createHash('sha256').update('T8-penguin-canvas-T8star-2026').digest();
+function encryptBuffer(plain) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', KEY, iv);
+  return Buffer.concat([MAGIC, iv, cipher.update(plain), cipher.final()]);
+}
+function decryptBuffer(enc) {
+  if (!enc.slice(0, MAGIC.length).equals(MAGIC)) throw new Error('missing magic');
+  const iv = enc.slice(MAGIC.length, MAGIC.length + 16);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', KEY, iv);
+  return Buffer.concat([decipher.update(enc.slice(MAGIC.length + 16)), decipher.final()]);
+}
+```
+
+### 44.3 bytenode 字节码与 V8 版本绑定（最重要的坑）
+
+bytenode 编译产出的 `.jsc` 是 **V8 cached data**，与运行时 V8 版本**强绑定**。
+
+- ❌ 用 plain Node 运行 `node electron/encrypt.cjs` → 产出的 `.jsc` 在 Electron 33 下加载会**直接崩溃**（`Bad magic number`）
+- ✅ 必须用 Electron 自带的 Node 来跑：`electron electron/encrypt.cjs`
+
+[encrypt.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/encrypt.cjs#L112-L135) 内置检测：
+
+```js
+if (!process.versions.electron) {
+  console.warn('[encrypt] WARNING: 该脚本未在 Electron 下执行! V8 版本不匹配会导致打包后崩溃。');
+}
+main();
+// Electron 环境下事件循环不会自动退出 → 必须主动 app.exit()
+if (process.versions.electron) require('electron').app.exit(0);
+else process.exit(0);
+```
+
+`package.json` 的 `"encrypt"` 脚本因此写成：
+
+```json
+"encrypt": "electron electron/encrypt.cjs"
+```
+
+而不是 `"node electron/encrypt.cjs"`。
+
+### 44.4 require 重写：保持相对路径不变
+
+后端源码大量 `require('./config')` / `require('./routes/canvas')`。加密后磁盘上不再有 `.js`，必须把 require 改写为带 `.t8c` 后缀，并在运行时通过 `require.extensions['.t8c']` hook 解密。
+
+[encrypt.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/encrypt.cjs#L51-L63) 的核心改写：
+
+```js
+function rewriteRequires(src) {
+  return src.replace(
+    /require\((['"])(\.\.?\/[^'"]+)\1\)/g,
+    (m, q, p) => {
+      if (/\.(t8c|json)$/.test(p)) return m;
+      const stripped = p.replace(/\.js$/, '');
+      return `require(${q}${stripped}.t8c${q})`;
+    },
+  );
+}
+```
+
+[loader.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/loader.cjs#L71-L100) 注册 `.t8c` hook 同时重写 `Module._resolveFilename` 兜底：当原始路径解析失败，自动追加 `.t8c` 再试一次。这样即使有遗漏改写也能 fallback。
+
+### 44.5 同进程加载（不 spawn 子进程）
+
+参考项目 spawn `python.exe app.py`；本项目无此必要——Electron 主进程本身就是 Node 环境，直接 `require` Express app 即可：
+
+```js
+// main.cjs
+async function startBackend() {
+  backendPort = await findFreePort(18766);
+  process.env.PORT = String(backendPort);
+  process.env.T8PC_USER_DATA = getUserDataDir();
+  process.env.T8PC_PACKAGED = isPackaged() ? '1' : '0';
+  process.env.T8PC_FRONTEND_DIST = isPackaged()
+    ? path.join(process.resourcesPath, 'frontend')
+    : path.resolve(__dirname, '..', 'dist');
+  require('./loader');                                              // 注册 .t8c hook
+  if (isPackaged()) {
+    require(path.join(process.resourcesPath, 'backend-enc', 'server.t8c'));
+  } else {
+    require(path.resolve(__dirname, '..', 'backend', 'src', 'server.js'));
+  }
+}
+```
+
+[server.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/server.js) 末尾必须 `module.exports = app`（虽然实际靠 `app.listen` 内部启动，导出方便测试与未来异常恢复）。
+
+好处：
+- 启动 1 个进程而非 2 个，**关闭主窗口 = 进程整体退出**，无僵尸 python
+- 后端日志直接合并到 Electron stdout
+- IPC 不需要跨进程，性能更好
+
+### 44.6 Express 同时托管前端 dist
+
+开发模式 Vite dev server (5180) 通过 proxy 访问后端 (18766)；打包后没有 Vite，前端必须由后端**同 origin** 提供，避免 CORS、避免端口冲突。
+
+[server.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/server.js#L73-L85) 在打包模式（`config.PACKAGED === true`）下：
+
+```js
+if (config.PACKAGED || process.env.T8PC_SERVE_FRONTEND === '1') {
+  const dist = config.FRONTEND_DIST;  // = process.env.T8PC_FRONTEND_DIST
+  if (fs.existsSync(dist)) {
+    app.use(express.static(dist));
+    // SPA fallback：除 /api /files /output /input 外都返回 index.html
+    app.get(/^(?!\/(api|files|output|input)).*/, (_req, res) => {
+      res.sendFile(path.join(dist, 'index.html'));
+    });
+  }
+}
+```
+
+BrowserWindow 直接 `loadURL('http://127.0.0.1:' + backendPort + '/')`，不是 `loadFile` ——**所有 API 路径与开发模式完全一致**，避免代码里写双份 fetch baseURL。
+
+### 44.7 数据目录迁移到 userData
+
+打包后 `resources/` 是只读的（NSIS 装到 `Program Files`），不能往里写 `data/canvas_list.json`。[config.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/config.js#L10-L19) 关键判定：
+
+```js
+const PACKAGED = process.env.T8PC_PACKAGED === '1';
+const USER_DATA_DIR = process.env.T8PC_USER_DATA || path.resolve(__dirname, '..', '..');
+const PROJECT_DIR = PACKAGED ? USER_DATA_DIR : path.resolve(__dirname, '..', '..');
+if (PACKAGED) {
+  if (!fs.existsSync(PROJECT_DIR)) fs.mkdirSync(PROJECT_DIR, { recursive: true });
+}
+```
+
+Windows 下 `app.getPath('userData')` 默认是 `%APPDATA%\T8-PenguinCanvas\`。装机后第一次启动会自动建：
+
+```
+%APPDATA%/T8-PenguinCanvas/
+├─ data/
+│  ├─ canvas_list.json
+│  ├─ settings.json
+│  └─ rh_apps.json
+├─ input/
+├─ output/
+└─ thumbnails/
+```
+
+用户卸载时 NSIS 配置 `deleteAppDataOnUninstall: false`，**保留作品**。
+
+### 44.8 electron-builder 配置要点
+
+[package.json](file:///e:/PenguinPravite/T8-penguin-canvas/package.json) 的 `build` 段重点：
+
+```json
+{
+  "asar": true,
+  "asarUnpack": ["node_modules/sharp/**/*", "node_modules/@img/**/*"],
+  "compression": "store",
+  "files": [
+    "electron/main.cjs", "electron/preload.cjs", "electron/loader.cjs",
+    "package.json", "node_modules/**/*",
+    "!backend/**/*",   "!src/**/*",
+    "!data/**/*",      "!input/**/*", "!output/**/*", "!thumbnails/**/*",
+    "!dist_electron/**/*", "!build/**/*"
+  ],
+  "extraResources": [
+    { "from": "build/backend-enc", "to": "backend-enc" },
+    { "from": "dist",              "to": "frontend"    }
+  ],
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+  "nsis": {
+    "oneClick": false, "allowToChangeInstallationDirectory": true,
+    "shortcutName": "贞贞的无限画布", "createDesktopShortcut": true,
+    "deleteAppDataOnUninstall": false
+  }
+}
+```
+
+关键决策：
+
+- **`asar: true`** + `"!backend/**/*"`：明文 `backend/src/*.js` **绝不会**进 asar，只有加密后的 `build/backend-enc/*.t8c` 通过 `extraResources` 进 `resources/backend-enc/`
+- **`asarUnpack: sharp`**：sharp 是原生 `.node`，必须解包到 `resources/app.asar.unpacked/node_modules/sharp/`，否则 require 失败
+- **`compression: "store"`**：不压缩，**安装速度快 10x**，代价是体积大约 +200MB；对桌面工具型应用更友好
+- **`postinstall: electron-builder install-app-deps`**：用户拿到源码 `npm install` 后会自动 rebuild sharp 适配 Electron ABI
+- **`!node_modules/electron/**/*` + `!node_modules/electron-builder/**/*`**：这两个是 dev 依赖巨型包，必须排除
+
+### 44.9 完整打包流程
+
+```bash
+# 一次性环境准备
+npm install                         # 安装根依赖 + 自动 install-app-deps rebuild sharp
+
+# 开发态调试 Electron
+npm run electron:dev                # 直接 electron electron/main.cjs (dev 模式)
+
+# 仅打 dist 目录(测试,不出 NSIS)
+npm run dist:dir
+# = npm run build              vite 产出 dist/
+# + npm run encrypt            electron electron/encrypt.cjs → build/backend-enc/*.t8c
+# + electron-builder --dir     dist_electron/win-unpacked/
+# + node electron/_post_build.cjs   核验 + 清明文
+
+# 出正式安装包
+npm run dist                        # 同上 + 产出 dist_electron/T8-PenguinCanvas-Setup-1.1.0.exe
+```
+
+产物结构（核验通过的 win-unpacked/）：
+
+```
+dist_electron/win-unpacked/
+├─ T8-PenguinCanvas.exe
+├─ resources/
+│  ├─ app.asar                                  含 electron/*.cjs + node_modules
+│  ├─ app.asar.unpacked/node_modules/sharp/...  原生模块
+│  ├─ backend-enc/                              加密后端字节码
+│  │  ├─ server.t8c
+│  │  ├─ config.t8c
+│  │  └─ routes/{canvas,settings,proxy,files,imageOps}.t8c
+│  └─ frontend/                                 前端 dist 静态
+│     ├─ index.html
+│     └─ assets/
+└─ ...
+```
+
+### 44.10 跨机器可移植性清单（用户能直接打开）
+
+参考项目要把 python-embed 整个塞进 resources，本项目省掉这一步——但仍要保证以下都进了 asar：
+
+| 必备 | 来源 | 在产物中的位置 |
+|------|------|----------------|
+| Express / cors / multer | 根 `dependencies` | `app.asar/node_modules/` |
+| sharp（原生） | 根 `dependencies` + `asarUnpack` | `app.asar.unpacked/node_modules/sharp/` |
+| bytenode（解密时 require） | 根 `dependencies` | `app.asar/node_modules/` |
+| 加密后端 | `extraResources` | `resources/backend-enc/` |
+| 前端 dist | `extraResources` | `resources/frontend/` |
+| Electron 自身 Node | electron-builder 自动 | `T8-PenguinCanvas.exe` 内嵌 |
+
+> 故意把 `cors / express / multer / sharp` 从 `backend/package.json` 提到根 `dependencies`——electron-builder 只看根 `package.json` 的 `dependencies` 字段决定要打包哪些 node_modules，**子目录的 package.json 它不读**。这是本项目专用的取舍（因为打包后整个后端在 root scope 运行）。
+
+### 44.11 安全模型与限制
+
+本方案的目标是 **「让一般技术爱好者无法直接读到后端业务源码」**，不是军用级保护：
+
+- ✅ 磁盘上不存在明文 `.js`，所有后端源码都是 AES 密文
+- ✅ 字节码经过 V8 编译后再加密，反编译需要先解密 + 再处理 V8 字节码（门槛极高）
+- ✅ 临时目录的 `.jsc` 是 V8 字节码（非可读源码），即使被读取也很难还原
+- ⚠️ 决心强的逆向者可以通过 hook electron 自带 Node 的 `vm.Script` 拿到运行时源码——这是任何 Electron App 的共性，加固成本与价值不成比例
+- ⚠️ `PASSPHRASE` 编码在 [loader.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/loader.cjs#L25)；强逆向者可从 asar 里抠出。**本质上是"门把手"而非"保险柜"**
+
+如需进一步加固，未来可考虑：动态密钥（机器指纹派生）、native loader（C++ N-API 写解密器并混淆）、strict CSP 阻止 DevTools 注入等——目前 v1.1.0 不做。
+
+### 44.12 关键文件
+
+- [electron/main.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/main.cjs)
+- [electron/preload.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/preload.cjs)
+- [electron/loader.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/loader.cjs)
+- [electron/encrypt.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/encrypt.cjs)
+- [electron/_post_build.cjs](file:///e:/PenguinPravite/T8-penguin-canvas/electron/_post_build.cjs)
+- [backend/src/config.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/config.js) ——PACKAGED / USER_DATA_DIR / FRONTEND_DIST
+- [backend/src/server.js](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/server.js) ——`--port` CLI / SPA fallback / `module.exports = app`
+- [package.json](file:///e:/PenguinPravite/T8-penguin-canvas/package.json) ——`main: electron/main.cjs` / scripts / build 配置块
+- [.gitignore](file:///e:/PenguinPravite/T8-penguin-canvas/.gitignore) ——排除 dist_electron/ build/backend-enc/ *.t8c *.jsc
+
+### 44.13 排错锦囊
+
+| 现象 | 根因 | 解决 |
+|------|------|------|
+| 启动后白屏，console 报 `Bad magic number` | bytenode 用了 plain Node 而非 Electron 编译 | 改用 `electron electron/encrypt.cjs` |
+| `Cannot find module './config'` | rewriteRequires 没生效或 .t8c hook 未注册 | 检查 main.cjs 是否在 require 加密入口前先 require('./loader') |
+| `require is not defined in ES module scope` | electron/*.js 被当 ESM 解析 | 全部改成 `.cjs` 扩展名（已落实） |
+| sharp `was compiled against a different Node.js version` | sharp 没 rebuild | 跑 `npm run postinstall` 或 `electron-builder install-app-deps` |
+| 关闭主窗口后任务管理器仍有残留进程 | 同进程方案不会有，但 spawn 子进程方案需要 taskkill | 本项目用同进程已规避 |
+| 数据写入 `Program Files` 失败 | 把数据目录算到了 resources/ | 检查 config.js PROJECT_DIR 必须 = USER_DATA_DIR |
+
+---
+
