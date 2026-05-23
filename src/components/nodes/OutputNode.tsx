@@ -478,7 +478,8 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
             {!editing ? (
               <div
                 onDoubleClick={enterEdit}
-                className={`whitespace-pre-wrap break-words text-[12px] leading-relaxed rounded px-2 py-1.5 cursor-text ${
+                onWheelCapture={(e) => e.stopPropagation()}
+                className={`nowheel whitespace-pre-wrap break-words text-[12px] leading-relaxed rounded px-2 py-1.5 cursor-text ${
                   isDark ? 'bg-white/5 text-white/85' : 'bg-black/5 text-zinc-800'
                 }`}
                 style={{ maxHeight: 200, overflow: 'auto' }}
