@@ -4,12 +4,15 @@ import {
   Position,
   useNodeConnections,
   useNodesData,
+  useReactFlow,
   type NodeProps,
+  type Node,
 } from '@xyflow/react';
 import { MonitorPlay, Type as TypeIcon, Image as ImageIcon, Video as VideoIcon, Music, Download, Pencil, Check } from 'lucide-react';
 import { useUpdateNodeData } from './useUpdateNodeData';
 import { useThemeStore } from '../../stores/theme';
 import { PORT_COLOR } from '../../config/portTypes';
+import ImageEditModal, { type ImageEditProduceMeta } from './ImageEditModal';
 
 /**
  * OutputNode - 通用输出素材节点 (中继展示型)
@@ -50,6 +53,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
   const d = (data as any) || {};
+  const rf = useReactFlow();
 
   // 订阅连入本节点 target handle 的连接变化
   const connections = useNodeConnections({ id, handleType: 'target' });
@@ -96,6 +100,16 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
       pushUnique(out.audios, ud.audioUrl);
     }
 
+    // 独立模式 (双击编辑生成的产物 OutputNode):
+    //   节点本身携带 directImageUrl/directImageUrls, 未连任何上游也能独立展示。
+    //   这些产物不会被 pickKind/pickIndex 过滤干预, 在下面独立补补。
+    if (typeof d.directImageUrl === 'string' && d.directImageUrl) {
+      pushUnique(out.images, d.directImageUrl);
+    }
+    if (Array.isArray(d.directImageUrls)) {
+      d.directImageUrls.forEach((u: any) => pushUnique(out.images, u));
+    }
+
     // 兜底: 一些节点把视频/音频塞在 imageUrl, 通过扩展名识别再纠正
     out.images = out.images.filter((u) => {
       if (isVideoUrl(u)) {
@@ -136,7 +150,7 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
     }
 
     return out;
-  }, [upstreamNodes, d.pickKind, d.pickIndex]);
+  }, [upstreamNodes, d.pickKind, d.pickIndex, d.directImageUrl, d.directImageUrls]);
 
   // 文本编辑
   const overrideText: string = typeof d.outputText === 'string' ? d.outputText : '';
@@ -169,6 +183,43 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
   const accent = '#5eead4'; // teal-300, 与 nodeRegistry color: 'teal' 对齐
 
   const total = collected.texts.length + collected.images.length + collected.videos.length + collected.audios.length;
+
+  // === 双击图片 → 裁剪/宫格弹窗 ===
+  // 仅针对 collected.images 中的单张图生效; 产物“不”修改本节点, 而是
+  // 以 directImageUrl 独立模式创建 N 个新 OutputNode (沉淀在本节点的右下区),
+  // 取 id 前缀 'output-auto-edit-' 以与源 output-auto-* 区分 (不受重排接管).
+  const [editingUrl, setEditingUrl] = useState<string | null>(null);
+  const handleProduce = (urls: string[], _meta: ImageEditProduceMeta) => {
+    if (!urls || urls.length === 0) return;
+    const me = rf.getNode(id);
+    const myW = (me as any)?.measured?.width || (me as any)?.width || 320;
+    const myH = (me as any)?.measured?.height || (me as any)?.height || 360;
+    const baseX = (me?.position?.x ?? 0) + myW + 80;
+    const baseY = me?.position?.y ?? 0;
+    const COLS = 3;
+    const COL_W = 350;
+    const ROW_H = Math.max(360, myH); // 以本节点高度为下限避免重叠
+    const ts = Date.now();
+    const newNodes: Node[] = urls.map((u, i) => {
+      const newId = `output-auto-edit-${id}-${ts}-${i}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      return {
+        id: newId,
+        type: 'output',
+        position: {
+          x: baseX + (i % COLS) * COL_W,
+          y: baseY + Math.floor(i / COLS) * ROW_H,
+        },
+        data: {
+          directImageUrl: u,
+          // 便于下游节点从 data 读取 (与现有 effect 透传不冲突)
+          imageUrl: u,
+        },
+      } as Node;
+    });
+    rf.addNodes(newNodes);
+  };
 
   // === 下游透传: 将 collected + displayText 写到自身 data 供下游节点读取 ===
   // 仅在生成的输出实际变化时调用 update, 避免 setNode 风暴.
@@ -398,8 +449,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
                 <img
                   src={u}
                   alt={`图像 ${i + 1}`}
-                  className="w-full h-auto rounded block"
+                  className="w-full h-auto rounded block cursor-zoom-in"
                   style={{ background: '#0008', objectFit: 'contain', maxHeight: 480 }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingUrl(u);
+                  }}
+                  title="双击编辑 (裁剪 / 宫格切分)"
                 />
                 <div className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-white/40' : 'text-zinc-400'}`}>
                   <span className="truncate flex-1" title={u}>{u.split('/').pop()}</span>
@@ -484,6 +540,13 @@ const OutputNode = ({ id, data, selected }: NodeProps) => {
         )}
       </div>
       </div>
+      {editingUrl && (
+        <ImageEditModal
+          srcUrl={editingUrl}
+          onClose={() => setEditingUrl(null)}
+          onProduce={handleProduce}
+        />
+      )}
     </div>
   );
 };
