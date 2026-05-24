@@ -5857,3 +5857,143 @@ router.post('/xxx/yyy', async (req, res) => {
 3. **错误信息是 UX 一部分**：用户看到「未配置贞贞工坊 API Key」会立刻去填通用 key，而真正的问题是专属 key —— 错误提示必须双重明示。
 
 ---
+
+## 56. RH APIKEY 统一 + 设置面板「获取 APIKey」按钮（v1.2.9.16 · 强制规范）
+
+### 需求背景
+v1.1.x 时期为十分严谨设计，RH 钱包应用节点使用独立的 `rhWalletApiKey`（企业级共享 APIKEY）与普通 RunningHub 节点的 `rhApiKey` 分开计费，后端 `pickRhApiKey(settings, useWallet)` 根据 useWallet 标志路由，未配置时报「未配置 RH 钱包 APIKEY」不 fallback rhApiKey 避免漏费频道。
+
+但这增加了两重问题：
+1. **用户认知成本高** —— 设置面板同时出现「RunningHub APIKEY」 + 「RH 钱包 APIKEY」两个字段，不清楚差别的用户会重复填入同一个 key。
+2. **获取入口难找** —— 用户不知道去哪里注册 RunningHub / 贞贞工坊 APIKEY，需要在设置面板直接提供入口。
+
+### 不变量（strong invariants）
+- 画布上 `runninghub` 与 `runninghub-wallet` 依然是两个独立节点类型，**UI 差异保留**（标题 / 图标 / 颜色）以便用户识别场景
+- 后端 4 条 RH 路由的签名、请求体、响应体 schema 零变动
+- 老 settings.json 中残留的 `rhWalletApiKey` 字段仅被 `loadSettings` 允许（不会报错），**运行时完全不被任何路由消费**——向后兼容
+
+### 修改矩阵（8 个文件）
+
+| # | 文件 | 改动要点 |
+|---|------|---------|
+| 1 | [`backend/src/routes/proxy.js`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/proxy.js) | `pickRhApiKey(settings)` 简化为单参 · `missingRhKeyError()` 文案统一 · 4 路由不再读 useWallet/wallet=1 |
+| 2 | [`backend/src/routes/settings.js`](file:///e:/PenguinPravite/T8-penguin-canvas/backend/src/routes/settings.js) | DEFAULT_SETTINGS 与 GET 脱敏返回移除 `rhWalletApiKey` 字段 |
+| 3 | [`src/types/canvas.ts`](file:///e:/PenguinPravite/T8-penguin-canvas/src/types/canvas.ts) | ApiSettings 接口移除 `rhWalletApiKey: string` |
+| 4 | [`src/stores/apiKeys.ts`](file:///e:/PenguinPravite/T8-penguin-canvas/src/stores/apiKeys.ts) | DEFAULT 对象移除 `rhWalletApiKey: ''` |
+| 5 | [`src/services/generation.ts`](file:///e:/PenguinPravite/T8-penguin-canvas/src/services/generation.ts) | `RhSubmitRequest` 接口去 useWallet · `queryRh/fetchRhAppInfo/uploadRhAsset` 3 函数去形参 · URL 不再拼 `&wallet=1` |
+| 6 | [`src/components/nodes/RunningHubNode.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/nodes/RunningHubNode.tsx) | `useWallet = type === 'runninghub-wallet'` 仅作 UI 区分；4 处调用去 useWallet 透传 |
+| 7 | [`src/components/ApiSettings.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/ApiSettings.tsx) | KeyField/COMMON_KEYS/emptyMap/emptyShow 同步瘦身 · 新增 `linkBtnCls/linkBtnAltCls/openExternal/renderGetKeyButtons` · baseUrlNote 升级为 flex-wrap 容器 |
+| 8 | [`src/components/Canvas.tsx`](file:///e:/PenguinPravite/T8-penguin-canvas/src/components/Canvas.tsx) + [`src/config/nodeRegistry.ts`](file:///e:/PenguinPravite/T8-penguin-canvas/src/config/nodeRegistry.ts) | 注释 / description 同步为「与 RunningHub 节点共用 RunningHub APIKEY」 |
+
+### 后端统一 helper
+```js
+// backend/src/routes/proxy.js
+// v1.2.9.16: 取消 rhWalletApiKey 单独字段 —— 普通 RH 节点 与 RH 钱包应用节点
+//            统一使用 settings.rhApiKey，简化用户配置心智。
+function pickRhApiKey(settings) {
+  return settings?.rhApiKey || settings?.runninghubApiKey || '';
+}
+function missingRhKeyError() {
+  return '未配置 RunningHub API Key（请在设置中填写 RunningHub API Key）';
+}
+```
+4 路由调用方统一改为 `pickRhApiKey(settings)` + `missingRhKeyError()`。
+
+### 前端「获取 APIKey」按钮双主题样式
+```tsx
+const linkBtnCls = isPixel
+  ? 'px-btn px-btn--mint flex items-center gap-1 text-[11px] px-2 py-1'
+  : `flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition border ${
+      isDark
+        ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200'
+        : 'border-emerald-500/40 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+    }`;
+const linkBtnAltCls = isPixel
+  ? 'px-btn flex items-center gap-1 text-[11px] px-2 py-1'
+  : `flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition border ${
+      isDark
+        ? 'border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200'
+        : 'border-cyan-500/40 bg-cyan-50 hover:bg-cyan-100 text-cyan-700'
+    }`;
+const openExternal = (url: string) => {
+  try { window.open(url, '_blank', 'noopener,noreferrer'); } catch {}
+};
+```
+
+### 「获取 APIKey」路由表
+| 字段 | 按钮 | 点击后跳转链接 |
+|------|------|--------------|
+| `zhenzhenApiKey` | 获取 APIKey | https://ai.t8star.org/register?aff=dP7j |
+| `rhApiKey` (主) | 获取 APIKey：国内用户 | https://www.runninghub.cn/user-center/1819214514410942465/webapp?inviteCode=rh-v1121 |
+| `rhApiKey` (次) | 国外用户 | https://www.runninghub.ai/user-center/1819214514410942465/webapp?inviteCode=rh-v1121 |
+| `llmApiKey` | — | 不提供（LLM 与贞贞同源，贞贞按钮已足） |
+
+### baseUrlNote 容器升级
+```tsx
+{(opts.baseUrlNote || renderGetKeyButtons(spec.field)) && (
+  <div className={`flex items-center gap-2 flex-wrap text-[11px] ${hintCls}`}>
+    {opts.baseUrlNote && (
+      <span className="flex items-center gap-1.5">
+        <Lock size={11} /> {opts.baseUrlNote}
+      </span>
+    )}
+    {renderGetKeyButtons(spec.field)}
+  </div>
+)}
+```
+`flex-wrap` 保证窄画布 / 小屏幕下 Lock 备注与按钮可自动换行不拥挤。
+
+### 强制规范（RH 节点重构 / 新加外部链接必读）
+
+- ✅ **统一 Key 入口**：后端读 RH key 必须走 `pickRhApiKey(settings)`，严禁出现 `settings.rhWalletApiKey` 读取
+- ✅ **路由不再读 useWallet**：4 条 RH 路由 (`/runninghub/{submit,query,app-info,upload-asset}`) 严禁从 body / query 读 `useWallet` 或 `wallet=1`，避免复活旧分路
+- ✅ **前端 API 套务单一参数**：`submitRh / queryRh / fetchRhAppInfo / uploadRhAsset` 严禁加回 useWallet 形参
+- ✅ **外部链接安全打开**：`window.open(url, '_blank', 'noopener,noreferrer')` 必须同时带 `noopener,noreferrer`，防止 reverse tabnabbing
+- ✅ **双主题适配**：任何新增设置面板按钮必须同时提供默认主题（`isPixel ? × : ×`）两套外观，严禁裸 className
+- ❌ **严禁复活「RH 钱包 APIKEY」设置项**：任何提议「为 RH 钱包单独加回 Key」的重构 PR 必须被拒绝，除非产品层面明确需要付费分渠隔离
+- ❌ **严禁从 settings.json 删除老字段**：loadSettings 仍该允许老用户 settings.json 存在 `rhWalletApiKey`，仅运行时不读
+
+### 向后兼容验收清单
+- [ ] 老用户启动后，APIKEY 设置面板仅看到 3 项（贞贞 / RH / LLM），**不会报错**
+- [ ] 老用户原有 RH 钱包应用节点可以直接提交运行（走 settings.rhApiKey）
+- [ ] 点击 3 个「获取 APIKey」按钮都能新窗口打开对应 URL
+- [ ] 三个主题×两个外观 = 12 种组合下按钮表现都识别可点
+
+### 教训
+1. **产品层面的字段拆分 ≠ 技术层面的路由拆分**：v1.1.x 的 rhWalletApiKey 在后端设计上是合理的，但在 UX 上增加了认知负担 —— 统一后用户只需填一个 Key。
+2. **字段移除必须同时考虑向后兼容**：DEFAULT_SETTINGS 移除不代表 loadSettings 要严拒老字段，同一代码路径不读老字段即可。
+3. **外部链接如果带邀请参数应供产品定义**：`inviteCode=rh-v1121` 在 features.json/skill.md/UI 代码三处同步，避免被中间人错误修改。
+
+### ⚠️ 版本号 semver 兼容陷阱（重要补记）
+
+**背景**：v1.2.9.16 首次打包时遇到错误：`Invalid version: "1.2.9.16"`。
+
+**原因**：electron-builder 严格遵循 **semver 3 段语义**（`MAJOR.MINOR.PATCH[-pre][+build]`），不接受 4 段版本号。本项目从 v1.2.9.0 起在 features.json/skill.md/title/__APP_VERSION__ 上均使用 4 段（只是 display 文本），但 package.json 被误同步为 4 段，导致打包失败。
+
+**解决方案**（v1.2.9.16 起强制）：
+
+| 位置 | 格式 | 示例 | 说明 |
+|---|---|---|---|
+| `package.json::version` | semver 3 段 | `1.2.916` | electron-builder 必须。`9.16` 拼接为 `916` 保语义递增 |
+| `vite.config.ts::__APP_VERSION__` | display 4 段 | `1.2.9.16` | Sidebar / Setting / 帮助面板读取 |
+| `electron/main.cjs::title` | display 4 段 | `v1.2.9.16` | 窗口标题 |
+| `electron/main.cjs::log窗口` | display 4 段 | `v1.2.9.16` | 启动 HTML |
+| `electron/main.cjs::IPC version` | display 4 段 | `1.2.9.16` | `t8pc:get-info` 返回 |
+| `README.md::badge` | display 4 段 | `v1.2.9.16` | 读者可见 |
+| `features.json::version` | display 4 段 | `1.2.9.16` | 项目语义版本 |
+| `features.json::packaging.version` | display 4 段 | `1.2.9.16` | 同上 |
+| `features.json::packaging.semverVersion` | semver 3 段 | `1.2.916` | 新增，记录 package.json 实际值 |
+| `features.json::packaging.installer` | semver 3 段 | `T8-PenguinCanvas-Setup-1.2.916.exe` | 实际 NSIS 产物名以 package.json 为准 |
+
+**拼接规则**：4 段 `A.B.C.D` → semver `A.B.<C><D>`，例：
+- `1.2.9.16` → `1.2.916`
+- `1.2.9.17` → `1.2.917`
+- `1.2.10.0`  → `1.2.1000`（警告：如 D 超16位需提前跳 minor）
+- 推荐到达 `1.2.9.99` 后跳到 `1.3.0`，避免 C 跳到 10 造成 D 冲突
+
+**必遵检查点**：
+- [ ] 升版同时同步 8 个位置，**只有 package.json::version 用 semver 3 段拼接格式**
+- [ ] features.json::packaging 同时保留 `version`（4段） + `semverVersion`（3段） + `installer`（3段）
+- [ ] 推送前用 `npm run dist:dir` 验证能启动再走 NSIS 完整打包
+
+---
