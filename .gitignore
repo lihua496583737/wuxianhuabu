@@ -31,6 +31,9 @@ _*.ps1
 _*.txt
 _*.log
 
+# Local project operating manual (do not publish)
+/skill.md
+
 # Dependencies
 node_modules
 .pnp
