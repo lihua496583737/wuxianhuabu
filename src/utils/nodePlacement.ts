@@ -260,17 +260,9 @@ export function resolveSingleSpawn(
   const baseStep = opts.step ?? PLACEMENT_STEP;
   const maxTries = opts.maxTries ?? PLACEMENT_MAX_TRIES;
 
-  // Pass 1: 紧凑搜索 (小 step, 找近邻空隙)
-  const pass1Tries = Math.min(24, maxTries);
-  const hit1 = spiralSearchSingle(desired, existing, baseStep, pass1Tries, gap);
-  if (hit1) return hit1;
-
-  // Pass 2: 自适应大 step (跨越大节点)
-  const adaptStep = computeAdaptiveStep([desired, ...existing], gap, baseStep);
-  if (adaptStep > baseStep) {
-    const hit2 = spiralSearchSingle(desired, existing, adaptStep, maxTries, gap);
-    if (hit2) return hit2;
-  }
+  // 单 pass 搜索: 固定小步长 + 充足尝试次数，保持紧凑
+  const hit = spiralSearchSingle(desired, existing, baseStep, maxTries, gap);
+  if (hit) return hit;
 
   // 兜底: 所有现有节点最右侧 + gap, y 取期望 y
   return fallbackRightmost(desired, existing, gap, opts);
@@ -295,20 +287,11 @@ export function resolveBatchSpawn(
   const baseStep = opts.step ?? PLACEMENT_STEP;
   const maxTries = opts.maxTries ?? PLACEMENT_MAX_TRIES;
 
-  // Pass 1: 紧凑搜索 (小 step, 找近邻空隙)
-  const pass1Tries = Math.min(24, maxTries);
-  const hit1 = spiralSearchBatch(desiredRects, existing, baseStep, pass1Tries, gap);
-  if (hit1) return hit1;
-
-  // Pass 2: 自适应大 step (跨越大节点)
-  const adaptStep = computeAdaptiveStep([...desiredRects, ...existing], gap, baseStep);
-  if (adaptStep > baseStep) {
-    const hit2 = spiralSearchBatch(desiredRects, existing, adaptStep, maxTries, gap);
-    if (hit2) return hit2;
-  }
+  // 单 pass 搜索: 用固定小步长保持紧凑，给足尝试次数
+  const hit = spiralSearchBatch(desiredRects, existing, baseStep, maxTries, gap);
+  if (hit) return hit;
 
   // 兜底: 把整组挪到最右边
-  // 先求组的包围盒
   const groupBox: Rect = boundingBox(desiredRects);
   const fallback = fallbackRightmost(groupBox, existing, gap, opts);
   return {

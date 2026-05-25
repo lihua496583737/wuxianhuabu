@@ -1995,7 +1995,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         const _desiredFP: PlacementRect[] = need.map((_, i) => ({
           x: baseX, y: baseY + i * 360, w: _szFP.w, h: _szFP.h,
         }));
-        const _offFP = placeBatchNodes(_desiredFP, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-frame-pair' });
+        const _offFP = placeBatchNodes(_desiredFP, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-frame-pair', gap: 0 });
         for (let i = 0; i < need.length; i++) {
           const h = need[i];
           const newId = `output-auto-${n.id}-${Date.now()}-${h}-${Math.random().toString(36).slice(2, 6)}`;
@@ -2047,7 +2047,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
         const _desiredSU: PlacementRect[] = need.map((_, i) => ({
           x: baseX, y: baseY + i * 360, w: _szSU.w, h: _szSU.h,
         }));
-        const _offSU = placeBatchNodes(_desiredSU, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-suno' });
+        const _offSU = placeBatchNodes(_desiredSU, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-suno', gap: 0 });
         for (let i = 0; i < need.length; i++) {
           const h = need[i];
           const newId = `output-auto-${n.id}-${Date.now()}-${h}-${Math.random().toString(36).slice(2, 6)}`;
@@ -2200,7 +2200,7 @@ function CanvasInner({ onAddNodeRef }: CanvasInnerProps) {
           w: _szGen.w, h: _szGen.h,
         };
       });
-      const _offGen = placeBatchNodes(_desiredGen, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-output' });
+      const _offGen = placeBatchNodes(_desiredGen, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-output', gap: 0 });
 
       for (let i = 0; i < needCount; i++) {
         const item = remainingItems[i];
