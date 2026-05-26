@@ -433,6 +433,7 @@ export interface RechargeOrder {
   quota: number;
   pay_type: 'alipay' | 'wxpay';
   status: RechargeOrderStatus;
+  pay_url?: string;
   trade_no?: string;
   create_time?: string;
   pay_time?: string;
@@ -458,6 +459,7 @@ export interface RechargeOrderCheckResponse {
   amount: number;
   quota: number;
   power?: number;
+  pay_url?: string;
   pay_time?: string;
   transfer_message?: string;
 }
