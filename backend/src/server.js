@@ -4,14 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
+// 创建 Express 应用实例
 const app = express();
 
-// ========== 中间件 ==========
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// ========== 中间件配置 ==========
+app.use(cors());  // 启用跨域资源共享（CORS）
+app.use(express.json({ limit: '50mb' }));  // 解析 JSON 请求体，限制 50MB
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));  // 解析 URL 编码请求体
 
-// 简易访问日志
+// 简易访问日志中间件 - 记录每个请求的时间和路径
 app.use((req, _res, next) => {
   const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   console.log(`[${t}] ${req.method} ${req.path}`);
@@ -19,6 +20,7 @@ app.use((req, _res, next) => {
 });
 
 // ========== 目录初始化 ==========
+// 确保所有必要的目录存在，不存在则创建
 [
   config.DATA_DIR,
   config.INPUT_DIR,
@@ -29,13 +31,15 @@ app.use((req, _res, next) => {
 });
 
 // ========== 静态资源托管 ==========
+// 将输入/输出/缩略图目录暴露为静态文件服务
 app.use('/files/output', express.static(config.OUTPUT_DIR));
 app.use('/files/input', express.static(config.INPUT_DIR));
 app.use('/files/thumbnails', express.static(config.THUMBNAILS_DIR));
 app.use('/output', express.static(config.OUTPUT_DIR));
 app.use('/input', express.static(config.INPUT_DIR));
 
-// ========== 健康检查 ==========
+// ========== 健康检查接口 ==========
+// GET /api/status - 返回服务状态信息
 app.get('/api/status', (_req, res) => {
   res.json({
     ok: true,
@@ -46,12 +50,12 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
-// ========== 业务路由 ==========
-const canvasRouter = require('./routes/canvas');
-const settingsRouter = require('./routes/settings');
-const proxyRouter = require('./routes/proxy');
-const filesRouter = require('./routes/files');
-const imageOpsRouter = require('./routes/imageOps');
+// ========== 业务路由注册 ==========
+const canvasRouter = require('./routes/canvas');      // 画布 CRUD 路由
+const settingsRouter = require('./routes/settings');  // 设置管理路由
+const proxyRouter = require('./routes/proxy');        // API 代理路由
+const filesRouter = require('./routes/files');        // 文件管理路由
+const imageOpsRouter = require('./routes/imageOps');  // 图像处理路由
 
 app.use('/api/canvas', canvasRouter);
 app.use('/api/settings', settingsRouter);
@@ -59,17 +63,17 @@ app.use('/api/proxy', proxyRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/image', imageOpsRouter);
 
-// ========== 前端静态资源(仅打包模式) ==========
-// 开发模式下不启用,避免与 Vite dev server 打架。
+// ========== 前端静态资源（仅打包模式）==========
+// 开发模式下不启用，避免与 Vite dev server 冲突
 if (config.IS_PACKAGED && config.FRONTEND_DIST && fs.existsSync(config.FRONTEND_DIST)) {
   app.use(express.static(config.FRONTEND_DIST));
-  // SPA 兑底: 除了 /api/* 与 /files/* 外,其他路由返回 index.html(允许前端路由)
+  // SPA 兜底：除了 /api/* 与 /files/* 外，其他路由返回 index.html（允许前端路由）
   app.get(/^\/(?!api\/|files\/|input\/|output\/).*/, (_req, res) => {
     res.sendFile(path.join(config.FRONTEND_DIST, 'index.html'));
   });
 }
 
-// ========== 启动 ==========
+// ========== 启动服务器 ==========
 const PORT = config.PORT;
 const HOST = config.HOST;
 
@@ -78,10 +82,10 @@ app.listen(PORT, HOST, () => {
   console.log('🐧 T8-penguin-canvas 后端服务');
   console.log('==================================================');
   console.log(`🚀 服务器启动成功!`);
-  console.log(`   地址: http://${HOST}:${PORT}`);
-  console.log(`   环境: ${config.NODE_ENV}`);
-  console.log(`   数据目录: ${config.DATA_DIR}`);
-  console.log(`   输出目录: ${config.OUTPUT_DIR}`);
+  console.log(`   地址：http://${HOST}:${PORT}`);
+  console.log(`   环境：${config.NODE_ENV}`);
+  console.log(`   数据目录：${config.DATA_DIR}`);
+  console.log(`   输出目录：${config.OUTPUT_DIR}`);
   console.log('   按 Ctrl+C 停止服务器...');
   console.log('--------------------------------------------------');
 });

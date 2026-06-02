@@ -1,28 +1,28 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
+    "target": "ES2022",                    // 编译目标为 ES2022
+    "useDefineForClassFields": true,       // 使用 define 语法处理类字段
+    "lib": ["ES2022", "DOM", "DOM.Iterable"], // 引入的库文件
+    "module": "ESNext",                    // 使用 ESNext 模块系统
+    "skipLibCheck": true,                  // 跳过声明文件的类型检查
+    "moduleResolution": "bundler",         // 使用 bundler 解析策略（Vite 5+ 推荐）
+    "allowImportingTsExtensions": true,    // 允许导入带 .ts/.tsx 扩展名的文件
+    "resolveJsonModule": true,             // 允许导入 JSON 模块
+    "isolatedModules": true,               // 确保每个文件可独立转译
+    "noEmit": true,                        // 不生成输出文件（由 Vite 处理）
+    "jsx": "react-jsx",                    // 使用 React 17+ 的 JSX 转换
+    "strict": true,                        // 启用所有严格类型检查
+    "noUnusedLocals": false,               // 不报告未使用的局部变量错误
+    "noUnusedParameters": false,           // 不报告未使用的参数错误
+    "noFallthroughCasesInSwitch": true,    // 报告 switch 语句中的 fallthrough 情况
+    "esModuleInterop": true,               // 启用 ES 模块互操作性
+    "allowSyntheticDefaultImports": true,  // 允许从没有默认导出的模块进行默认导入
+    "forceConsistentCasingInFileNames": true, // 强制文件名大小写一致
+    "baseUrl": ".",                        // 基础路径为当前目录
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"]                   // 配置 @ 别名指向 src 目录
     }
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src"],                      // 包含 src 目录下的所有文件
+  "references": [{ "path": "./tsconfig.node.json" }] // 引用 node 配置文件
 }
