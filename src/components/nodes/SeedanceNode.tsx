@@ -43,7 +43,7 @@ import {
  *                + video_url(role=reference_video) + audio_url(role=reference_audio)
  *   - 参数: duration / ratio / resolution / generate_audio / return_last_frame
  *           / watermark / web_search(tools) / seed
- *   - 轮询: 默认 10s 间隔, 最多 360 次
+ *   - 轮询: 默认 10s 间隔, 最少覆盖 3600s
  *
  * 上游连接(支持的输入):
  *   - text 节点 → prompt
@@ -58,6 +58,9 @@ const MODEL_OPTIONS = [
 const RATIO_OPTIONS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21', 'adaptive'];
 const RESOLUTION_OPTIONS = ['480p', '720p', 'native1080p', '1080p', '2k', '4k'];
 const DURATION_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const SEEDANCE_POLL_TIMEOUT_SECONDS = 3600;
+const seedanceMinPollCount = (intervalMs: number) =>
+  Math.ceil((SEEDANCE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
 
 const SeedanceNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
@@ -232,7 +235,7 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
     return new Promise<void>((resolve, reject) => {
       let elapsed = 0;
       const POLL_MS = Math.max(2, pollInt) * 1000;
-      const MAX = Math.max(10, maxPoll);
+      const MAX = Math.max(10, maxPoll, seedanceMinPollCount(POLL_MS));
       let lastProgress = '';
       pollTimer.current = window.setInterval(async () => {
         elapsed += 1;
@@ -694,8 +697,8 @@ const SeedanceNode = ({ id, data, selected }: NodeProps) => {
               type="number"
               value={maxPoll}
               min={10}
-              max={1000}
-              onChange={(e) => update({ maxPoll: Math.max(10, Math.min(1000, Number(e.target.value) || 360)) })}
+              max={3600}
+              onChange={(e) => update({ maxPoll: Math.max(10, Math.min(3600, Number(e.target.value) || 360)) })}
               className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white outline-none focus:border-white/30"
             />
           </div>

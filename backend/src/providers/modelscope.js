@@ -4,7 +4,14 @@ const { resolveMediaRef } = require('./mediaResolver');
 const DEFAULT_MODEL = 'Tongyi-MAI/Z-Image-Turbo';
 const DEFAULT_CHAT_MODEL = 'Qwen/Qwen3-235B-A22B';
 const DEFAULT_CHAT_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_IMAGE_TIMEOUT_MS = 60 * 60 * 1000;
 const DEFAULT_POLL_INTERVAL_MS = 1500;
+
+function generationTimeoutMs(value, fallback = DEFAULT_IMAGE_TIMEOUT_MS) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.max(DEFAULT_IMAGE_TIMEOUT_MS, Math.round(n));
+}
 
 function stripBearer(value) {
   return String(value || '').trim().replace(/^Bearer\s+/i, '');
@@ -191,7 +198,7 @@ async function generateImage(provider, input = {}, options = {}) {
   };
   const apiRoot = validation.baseUrl;
   const fetchImpl = options.fetchImpl || fetch;
-  const timeoutMs = Number(options.timeoutMs) || 120000;
+  const timeoutMs = generationTimeoutMs(options.timeoutMs);
   const pollIntervalMs = Math.max(1, Number(options.pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS);
   const deadline = Date.now() + timeoutMs;
 
@@ -200,7 +207,7 @@ async function generateImage(provider, input = {}, options = {}) {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      timeoutMs: options.submitTimeoutMs || options.timeoutMs,
+      timeoutMs: options.submitTimeoutMs || timeoutMs,
       fetchImpl,
     });
     const raw = await responseJson(submit);
@@ -230,7 +237,7 @@ async function generateImage(provider, input = {}, options = {}) {
       const poll = await openaiCompatible.fetchWithTimeout(`${apiRoot}/tasks/${encodeURIComponent(taskId)}`, {
         method: 'GET',
         headers: { ...headers, 'X-ModelScope-Task-Type': 'image_generation' },
-        timeoutMs: options.pollTimeoutMs || options.timeoutMs,
+        timeoutMs: options.pollTimeoutMs || timeoutMs,
         fetchImpl,
       });
       const data = await responseJson(poll);

@@ -2320,8 +2320,8 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
               if (state.lastDone && state.lastDone.id === id) finish();
               if (cancelRunRef.current) finish();
             });
-            // 安全超时 5 分钟(轮询任务可能较长)
-            const timer = window.setTimeout(finish, 5 * 60 * 1000);
+            // 安全超时 60 分钟，避免图像/视频/SD2.0/音频长轮询被批量运行提前截断。
+            const timer = window.setTimeout(finish, 60 * 60 * 1000);
             triggerRun(id, 'batch');
           });
           setBatchProgress(order.length, i + 1);

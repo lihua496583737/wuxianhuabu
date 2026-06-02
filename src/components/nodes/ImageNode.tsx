@@ -64,6 +64,10 @@ import {
  * 参数:模型 TAB / 比例 / 尺寸 / 多张参考图 / 本地 prompt
  * 上游 text 节点 → prompt(优先);上游 image 节点 → 参考图(并入 references)
  */
+const IMAGE_POLL_TIMEOUT_SECONDS = 3600;
+const minPollCountForTimeout = (intervalMs: number) =>
+  Math.ceil((IMAGE_POLL_TIMEOUT_SECONDS * 1000) / Math.max(1, intervalMs));
+
 const ImageNode = ({ id, data, selected }: NodeProps) => {
   const update = useUpdateNodeData(id);
   const hasAutoOutput = useHasAutoOutput(id);
@@ -175,7 +179,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
   const mjSv: string = d?.mjSv || '1';
   const mjNo: string = d?.mjNo || '';
   const mjSeed: number = d?.mjSeed ?? 0;
-  const mjMaxPoll: number = d?.mjMaxPoll ?? 300;
+  const mjMaxPoll: number = d?.mjMaxPoll ?? 1200;
   const mjPollInt: number = d?.mjPollInt ?? 3;
   const mjSrefImages: string[] = Array.isArray(d?.mjSrefImages) ? d.mjSrefImages : [];
   const mjOrefImages: string[] = Array.isArray(d?.mjOrefImages) ? d.mjOrefImages : [];
@@ -452,8 +456,12 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         const taskId = submit.taskId;
         logBus.info(`MJ 任务已提交 taskId=${taskId} fullPrompt="${fullPrompt.slice(0, 120)}${fullPrompt.length > 120 ? '…' : ''}"`, src);
         update({ progress: '15%', taskId });
-        const maxPoll = Math.max(10, Math.min(2000, mjMaxPoll || 300));
         const interval = Math.max(1, Math.min(30, mjPollInt || 3)) * 1000;
+        const maxPoll = Math.max(
+          10,
+          minPollCountForTimeout(interval),
+          Math.min(3600, mjMaxPoll || 1200),
+        );
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
           const q = await queryMjTask(taskId, mjSpeed);
@@ -541,7 +549,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           return;
         }
 
-        // 异步轮询(主项目默认 maxPoll=1200, pollInt=3s; 这里按 2h 上限会太长,采用 600×3s=30min)
+        // 异步轮询: 1200×3s = 3600s，避免 FAL 图像长队列 30min 提前超时。
         const { requestId, responseUrl, endpoint } = submit;
         if (!requestId || !responseUrl) throw new Error('FAL 提交后未获得 request_id/response_url');
         logBus.info(`FAL异步任务已提交 requestId=${requestId}`, src);
@@ -551,8 +559,8 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
           falResponseUrl: responseUrl,
           falEndpoint: endpoint,
         });
-        const maxPoll = 600;
         const interval = 3000;
+        const maxPoll = minPollCountForTimeout(interval);
         for (let i = 0; i < maxPoll; i++) {
           await new Promise((r) => setTimeout(r, interval));
           const q = await queryImageFal({ responseUrl, endpoint, requestId });
@@ -1316,9 +1324,9 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
               <div>
                 <label className="text-[10px] text-white/50 block mb-1" title="轮询最大次数">maxPoll</label>
                 <input
-                  type="number" min={10} max={2000}
+                  type="number" min={10} max={3600}
                   value={mjMaxPoll}
-                  onChange={(e) => update({ mjMaxPoll: Math.max(10, Math.min(2000, parseInt(e.target.value) || 300)) })}
+                  onChange={(e) => update({ mjMaxPoll: Math.max(10, Math.min(3600, parseInt(e.target.value) || 1200)) })}
                   style={{ background: '#18181b', color: '#ffffff' }}
                   className="w-full rounded border border-white/10 px-2 py-1 text-xs outline-none focus:border-white/30"
                 />

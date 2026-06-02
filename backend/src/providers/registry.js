@@ -149,7 +149,7 @@ const DEFAULT_ADVANCED_PROVIDERS = [
       executablePath: '',
       useWsl: false,
       wslDistro: '',
-      pollSeconds: 900,
+      pollSeconds: 3600,
     },
   },
 ];
@@ -374,7 +374,7 @@ function normalizeJimengConfig(value) {
     executablePath: cleanText(raw.executablePath || raw.binPath || '', 260),
     useWsl: normalizeBoolean(raw.useWsl, false),
     wslDistro: cleanText(raw.wslDistro || '', 80),
-    pollSeconds: normalizeNumber(raw.pollSeconds, 900, 1, 3600),
+    pollSeconds: normalizeNumber(raw.pollSeconds, 3600, 3600, 3600),
   };
 }
 

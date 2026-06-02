@@ -6,6 +6,7 @@ const {
 } = require('./mediaResolver');
 
 const DEFAULT_TIMEOUT_MS = 5000;
+const GENERATION_TIMEOUT_MS = 60 * 60 * 1000;
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const SUCCESS_STATUSES = new Set(['SUCCESS', 'SUCCEEDED', 'COMPLETED', 'DONE', 'OK']);
 const FAILURE_STATUSES = new Set(['FAILED', 'FAILURE', 'ERROR', 'CANCELED', 'CANCELLED']);
@@ -284,8 +285,10 @@ function extractStatus(raw) {
 }
 
 async function pollHistory(baseUrl, promptId, options = {}) {
-  const maxPoll = Number(options.maxPoll || 600);
   const interval = Number(options.pollIntervalMs || 1000);
+  const requestedMaxPoll = Math.max(1, Number(options.maxPoll || 600));
+  const minMaxPoll = Math.ceil(GENERATION_TIMEOUT_MS / Math.max(1, interval));
+  const maxPoll = Math.max(requestedMaxPoll, minMaxPoll);
   let lastRaw = null;
   for (let i = 0; i < maxPoll; i += 1) {
     if (i > 0 && interval > 0) await new Promise((resolve) => setTimeout(resolve, interval));

@@ -1,7 +1,7 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
   "version": "1.9.4",
-  "lastUpdated": "2026-06-02-soccer-hero-polish",
+  "lastUpdated": "2026-06-03-generation-poll-cloud-upload-release",
   "packaging": {
     "description": "Electron NSIS 桌面端打包链路(v1.2.1 起标准化, 严禁未明确指令主动打包)。完整产物拓扑: app.asar(electron/{main,loader,preload}.cjs + node_modules) + app.asar.unpacked(node_modules/sharp + @img) + resources/backend-enc/*.t8c(extraResources, asar 外) + resources/frontend(extraResources, asar 外)。前端版本号由 vite define 注入 __APP_VERSION__、Sidebar 左下角自动同步。",
     "scripts": {
@@ -18,13 +18,13 @@
     },
     "version": "1.9.4",
     "semverVersion": "1.9.4",
-    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.9.4：扩展 API 平台继续作为高级可选入口，ModelScope 图像生成新增 LoRA 管理与节点内多选，默认 LoRA 列表从 Infinite-Canvas 同步；ModelScope LLM 继续走 /v1/chat/completions、Bearer Key 规范化和长任务超时；本地 ComfyUI 接入新增 API Workflow 自动识别、可视化字段映射和 LoadImage 上游图片自动上传，降低本地工作流配置门槛；去AI水印桥接同步上游 remove-ai-watermarks 0.8.7，隐形水印保护开关改为 opt-in，强度留空由上游按来源自适应；新增 RH工具箱只读运行节点和开发态 RH工具箱制作器，制作器仅在 Vite dev 环境出现，生产/Electron 包必须由后置检查拦截；新增第九套官方主题「足球小将风格」，使用原创绿茵球场、蓝白 10 号球衣、比分牌、小地图和足球传球连线动效，并完成 Captain Tsubasa / Japan 3:2 Brazil 标题牌居中与新球衣 logo 资产替换。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变。",
+    "versionNote": "v1.3.0 起统一采用 semver 三段阶段号 x.y.z；当前源码为 v1.9.4：扩展 API 平台继续作为高级可选入口，ModelScope 图像生成新增 LoRA 管理与节点内多选，默认 LoRA 列表从 Infinite-Canvas 同步；ModelScope LLM 继续走 /v1/chat/completions、Bearer Key 规范化和长任务超时；本地 ComfyUI 接入新增 API Workflow 自动识别、可视化字段映射和 LoadImage 上游图片自动上传，降低本地工作流配置门槛；去AI水印桥接同步上游 remove-ai-watermarks 0.8.7，隐形水印保护开关改为 opt-in，强度留空由上游按来源自适应；新增 RH工具箱只读运行节点和开发态 RH工具箱制作器，制作器仅在 Vite dev 环境出现，生产/Electron 包必须由后置检查拦截；新增第九套官方主题「足球小将风格」，使用原创绿茵球场、蓝白 10 号球衣、比分牌、小地图和足球传球连线动效，并完成 Captain Tsubasa / Japan 3:2 Brazil 标题牌居中与新球衣 logo 资产替换；素材右键新增云端上传目标入口，首版支持腾讯云 COS 与阿里云 OSS 真实上传，百度网盘和夸克网盘保留配置占位；除 LLM 外，图像、视频、SD2.0/Seedance、音频/Suno 及扩展图像/视频平台、批量运行、循环器等待统一不低于 3600 秒。默认主流程仍保持贞贞工坊 / RunningHub / LLM 独立 Key 不变。",
     "installer": "本次为源码发布，未重新打包 Electron；上一实测安装包为 dist_electron/T8-PenguinCanvas-Setup-1.9.3.exe。如需离线用户包，必须把 tools/remove-ai-watermarks-runtime sidecar runtime 同步到 remove-ai-watermarks 0.8.7+ 后再执行 npm run dist。",
     "checklist": [
       "运行 npm run encrypt 前确认已 npm install bytenode 且使用 Electron 内置 Node",
       "backend/src/ 任何文件修改后必须重新 npm run encrypt 再打包",
       "main.cjs 的窗口标题 / log 窗口 / IPC version 三处版本号，以及 backend/src/config.js APP_VERSION 必须与 package.json 同步",
-      "_post_build.cjs 验证 24 个 .t8c 必存在: server/config + routes/{canvas,settings,proxy,externalProviders,files,imageOps,recharge,resources,themes,eagle,aiWatermark} + providers/{registry,mediaResolver,adapters,openaiCompatible,modelscope,volcengine,comfyui,jimengCli} + tools/aiWatermark/{runner,media} + utils/duckPayload",
+      "_post_build.cjs 验证后端 .t8c 必存在: server/config + routes/{canvas,settings,proxy,externalProviders,files,imageOps,recharge,resources,themes,eagle,aiWatermark,cloudUploads} + providers/{registry,mediaResolver,adapters,openaiCompatible,modelscope,volcengine,comfyui,jimengCli} + cloudUploads/{settings,uploader} + tools/aiWatermark/{runner,media} + utils/duckPayload",
       "_post_build.cjs 验证 resources/frontend/index.html + assets/ 必存在",
       "_post_build.cjs 必须让 src/assets/theme-music/*.mp3 / *.mid 经 Vite 输出到 resources/frontend/assets，主题音乐默认静音且随前端资源一起打包",
       "_post_build.cjs 必须检查 resources/tools/remove-ai-watermarks sidecar runtime slot；普通源码构建缺少 runtime 时只警告，正式用户包设置 T8_REQUIRE_AI_WATERMARK_RUNTIME=1 后缺少 remove-ai-watermarks.exe / Scripts/remove-ai-watermarks.exe / python.exe 等入口必须失败",
@@ -1938,6 +1938,32 @@
         "主题模板管理器、后端主题白名单、ThemeMusicToggle、App 顶栏、Sidebar 图标包和 Canvas MiniMap 均同步 soccer-hero；足球主题标题使用 Captain Tsubasa，比分牌使用 Japan 3:2 Brazil，球场 SVG 顶部两块标题牌整体以中线视觉居中且文字使用 text-anchor=middle 防止偏移或溢出；默认音乐使用 src/assets/theme-music/soccer-tsubasa-burning-hero.mid，ThemeMusicToggle 可解析 MIDI 并循环播放，golden-goal 仅作为兜底 preset。",
         "验证要求：node --test tests/apiSettingsTheme.test.ts、node --test tests/*.test.ts 与 npm run build。"
       ]
+    },
+    "phase131": {
+      "label": "云端上传目标与素材右键上传 (v1.9.4)",
+      "status": "complete",
+      "items": [
+        "roadmap.md 新增「云端上传目标路线」，明确该能力作为资源库之外的外部归档 / 分享入口，默认不影响生成、资源库、节点发送和自动保存主流程。",
+        "API 设置页新增默认折叠的「云端上传目标【可选】」区，支持腾讯云 COS、阿里云 OSS、百度网盘和夸克网盘四个目标的显示名、启用开关、默认目标、路径前缀、配置检查和密钥脱敏保存；表单继续使用 t8-api-settings 语义类保证各官方主题可读。",
+        "后端 settings 路由新增 cloudUploadTargets / cloudUploadSummary，保存时遇到空值或 **** 脱敏值会保留旧密钥，GET 返回 SecretId/SecretKey/AccessKey/Token/Cookie 的脱敏状态。",
+        "新增 backend/src/routes/cloudUploads.js、backend/src/cloudUploads/settings.js、backend/src/cloudUploads/uploader.js：提供 GET /api/cloud-uploads/status、POST /api/cloud-uploads/test、POST /api/cloud-uploads/upload。",
+        "腾讯云 COS 与阿里云 OSS 第一版支持真实上传，按 t8-canvas/{kind}/{yyyy-mm}/filename.ext 生成对象 key，可选公共域名返回直链；百度网盘和夸克网盘先保留清晰配置位和友好错误，等待稳定 OAuth/CLI 授权方案后接入真实上传。",
+        "素材右键菜单新增「上传到云端」分区，复用 data-drag-source 协议，UploadNode / OutputNode / 资源库卡片等图像、视频、音频素材可以直接上传；上传成功后自动尝试复制云端 URL 或对象路径。",
+        "electron/_post_build.cjs 纳入 routes/cloudUploads.t8c 与 cloudUploads/settings.t8c、cloudUploads/uploader.t8c 校验，避免 Electron 包漏带新后端模块。",
+        "新增 tests/cloudUploads.test.ts，覆盖默认目标迁移、密钥保留、脱敏、摘要、对象 key 生成和网盘占位错误；验证通过 node --test tests/cloudUploads.test.ts、全量 node --test tests/*.test.ts 与 npm run build。"
+      ]
+    },
+    "phase132": {
+      "label": "主生成节点轮询等待统一 3600 秒 (v1.9.4)",
+      "status": "complete",
+      "items": [
+        "音频 Suno 节点从 3s×60=180s 调整为 3s×1200=3600s，长歌词、翻唱、续写任务不会再 3 分钟提前报轮询超时。",
+        "图像节点标准 GPT2 / nano-banana 路径保持 2s×1800=3600s；FAL 图像从 600×3s=1800s 调整为 1200×3s=3600s；MJ 默认 maxPoll 改为 1200，旧节点保存的较小 maxPoll 会在运行时按 pollInt 自动补足到 3600s。",
+        "视频节点普通异步轮询从 480×5s=2400s 调整为 720×5s=3600s；FAL 视频继续使用 600×6s=3600s 并改为同一常量表达。",
+        "SD2.0 / Seedance 节点保留用户可调 Max Poll / Interval，但实际运行会按当前 interval 自动补足到至少 3600s，避免历史配置或短 interval 造成提前超时。",
+        "扩展 API 平台的图像/视频入口统一给 3600s 兜底：ModelScope 图像异步 deadline 从 120s 抬到 3600s，本地 ComfyUI /history 轮询按间隔补足 3600s，火山图像与视频轮询抬到 3600s，即梦 CLI pollSeconds 默认与归一化均为 3600s。",
+        "批量运行与循环器等待节点完成的安全超时从 5 分钟改为 60 分钟，避免节点自身还在轮询时被上层执行链提前判定失败；LLM 节点自身超时策略未纳入本次改动。"
+      ]
     }
   },
   "categories": {
@@ -2641,6 +2667,37 @@
       ],
       "reference": "roadmap.md::扩展 API 平台融合路线（参考 Infinite-Canvas）"
     },
+    "cloudUploadTargets": {
+      "label": "云端上传目标【可选】",
+      "status": "right-click-upload-first-version",
+      "since": "v1.9.4-cloud-upload-targets",
+      "placement": "API 设置页中位于「扩展 API 平台【高级/可选】」之后、文件自动保存路径之前，默认折叠；未启用时素材右键菜单不显示云端目标。",
+      "principles": [
+        "复用素材 data-drag-source 协议，图像 / 视频 / 音频素材右键即可上传，不修改节点数据。",
+        "密钥只在后端保存，GET /api/settings 与 GET /api/cloud-uploads/status 只返回脱敏状态。",
+        "输入空值或 **** 脱敏值时保留旧密钥，输入新值才覆盖。",
+        "腾讯云 COS 与阿里云 OSS 首版真实上传；百度网盘与夸克网盘先保留配置位和友好错误，等待稳定 OAuth/CLI 方案。",
+        "新增平台必须优先扩展 backend/src/cloudUploads/settings.js 与 uploader.js，不在节点组件里写平台分支。"
+      ],
+      "providers": [
+        "tencent-cos",
+        "aliyun-oss",
+        "baidu-netdisk",
+        "quark-netdisk"
+      ],
+      "backend": [
+        "backend/src/cloudUploads/settings.js（默认目标、配置清洗、密钥保留、脱敏、摘要）",
+        "backend/src/cloudUploads/uploader.js（素材解析、对象 key 生成、COS/OSS 签名 PUT 上传）",
+        "backend/src/routes/cloudUploads.js（status/test/upload 路由）"
+      ],
+      "frontend": [
+        "src/components/ApiSettings.tsx（云端上传目标折叠设置区）",
+        "src/components/MaterialContextMenu.tsx（素材右键上传到云端）",
+        "src/services/api.ts（getCloudUploadStatus/testCloudUploadTarget/uploadCloudAsset）",
+        "src/types/canvas.ts（CloudUploadTargetConfig / CloudUploadSummary）"
+      ],
+      "reference": "roadmap.md::云端上传目标路线（开发中）"
+    },
     "fileSavePath": {
       "label": "文件自动保存路径",
       "backendField": "fileSavePath",
@@ -2674,8 +2731,9 @@
       "settings": [
         "GET /api/settings — 三套 Key 设置(脱敏)",
         "GET /api/settings — v1.8.1 起返回脱敏 advancedProviders 与 advancedProviderSummary，用于扩展 API 平台折叠态摘要",
+        "GET /api/settings — v1.9.4 起返回脱敏 cloudUploadTargets 与 cloudUploadSummary，用于云端上传目标设置和右键菜单摘要",
         "GET /api/settings/raw — 内部明文(代理调用使用；设置总导出会用作私密备份源；advancedProviders 原始密钥只在此内部接口可见)",
-        "POST /api/settings — 更新设置（fileSavePath/canvasAutoSavePath/resourceLibraryPath/themeTemplatePath 变动后后端自动 ensureDir；advancedProviders 会过滤非法 provider 并保留 masked/空值对应的旧密钥；设置总导入回填后仍通过此接口保存）",
+        "POST /api/settings — 更新设置（fileSavePath/canvasAutoSavePath/resourceLibraryPath/themeTemplatePath 变动后后端自动 ensureDir；advancedProviders 与 cloudUploadTargets 会过滤非法配置并保留 masked/空值对应的旧密钥；设置总导入回填后仍通过此接口保存）",
         "GET/POST/PUT/DELETE /api/settings/rh-tool-categories[/:id] — RH 超市分类 CRUD（v1.2.10）",
         "POST /api/settings/rh-tool-categories/reorder — RH 超市分类排序（v1.2.10）",
         "GET/POST/PUT/DELETE /api/settings/rh-tool-apps[/:id] — RH 超市应用 CRUD（v1.2.10）",
@@ -2715,6 +2773,11 @@
       "aiWatermark": [
         "GET /api/ai-watermark/status — 检测 remove-ai-watermarks CLI/Python 包或 Electron sidecar runtime、版本、已知 visible mark 与 optionalFeatures(invisible/lama/detect/trustmark)",
         "POST /api/ai-watermark/process — 去AI水印辅助节点处理入口，支持 smart/visible/erase(cv2/LaMA)/invisible/metadata-check/metadata-remove/identify，输出统一转存 /files/output 或返回文本报告"
+      ],
+      "cloudUploads": [
+        "GET /api/cloud-uploads/status — 返回云端上传目标的脱敏配置与摘要，用于 API 设置页和素材右键菜单",
+        "POST /api/cloud-uploads/test — 检查单个云端上传目标配置，真实上传前不写入测试文件",
+        "POST /api/cloud-uploads/upload — 将图像/视频/音频素材上传到启用的云端目标；首版支持腾讯云 COS 与阿里云 OSS，输出 URL/path/objectKey"
       ],
       "proxy": [
         "POST /api/proxy/image — 图像生成(贞贞工坊,自动转存)",

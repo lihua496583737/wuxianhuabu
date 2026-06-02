@@ -146,6 +146,65 @@ export interface AdvancedProviderSummary {
   jimengConfigured: boolean;
 }
 
+export type CloudUploadProvider =
+  | 'tencent-cos'
+  | 'aliyun-oss'
+  | 'baidu-netdisk'
+  | 'quark-netdisk';
+
+export interface CloudUploadTargetConfig {
+  id: string;
+  provider: CloudUploadProvider;
+  label: string;
+  enabled?: boolean;
+  isDefault?: boolean;
+  prefix?: string;
+  publicBaseUrl?: string;
+  tencentCos?: {
+    bucket?: string;
+    region?: string;
+    secretId?: string;
+    secretKey?: string;
+    hasSecretId?: boolean;
+    hasSecretKey?: boolean;
+  };
+  aliyunOss?: {
+    bucket?: string;
+    endpoint?: string;
+    accessKeyId?: string;
+    accessKeySecret?: string;
+    hasAccessKeyId?: boolean;
+    hasAccessKeySecret?: boolean;
+  };
+  baiduNetdisk?: {
+    folder?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    appKey?: string;
+    appSecret?: string;
+    hasAccessToken?: boolean;
+    hasRefreshToken?: boolean;
+    hasAppKey?: boolean;
+    hasAppSecret?: boolean;
+  };
+  quarkNetdisk?: {
+    folder?: string;
+    mode?: 'external-command' | 'cookie';
+    commandPath?: string;
+    cookie?: string;
+    hasCookie?: boolean;
+  };
+}
+
+export interface CloudUploadSummary {
+  totalCount: number;
+  enabledCount: number;
+  configuredCount: number;
+  supportedUploadCount: number;
+  defaultTargetId?: string;
+  defaultLabel?: string;
+}
+
 export type CanvasProviderSource = 'zhenzhen' | AdvancedProviderProtocol;
 
 export interface CanvasNodeData {
@@ -211,6 +270,8 @@ export interface ApiSettings {
   eagleApiBase?: string;
   advancedProviders?: AdvancedProviderConfig[];
   advancedProviderSummary?: AdvancedProviderSummary;
+  cloudUploadTargets?: CloudUploadTargetConfig[];
+  cloudUploadSummary?: CloudUploadSummary;
   preferences?: {
     theme?: 'dark' | 'light';
     language?: string;

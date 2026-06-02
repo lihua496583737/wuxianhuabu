@@ -10,8 +10,9 @@ function cleanExecutablePath(provider) {
 }
 
 function pollSeconds(provider) {
-  const n = Number(provider?.jimengConfig?.pollSeconds || 900);
-  return Math.max(1, Math.min(3600, Number.isFinite(n) ? Math.round(n) : 900));
+  const n = Number(provider?.jimengConfig?.pollSeconds || 3600);
+  const seconds = Number.isFinite(n) ? Math.round(n) : 3600;
+  return Math.max(3600, Math.min(3600, seconds));
 }
 
 function commandExists(command) {
