@@ -1,52 +1,59 @@
+```
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+.yarn-cache/
+
+# Build outputs
+dist/
+build/
+coverage/
+.nyc_output/
+.eslintcache
+
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Editor
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-
-# Build output
-dist
-dist-ssr
-*.local
-
-# Electron 打包产物与中间产物 (不上传仓库)
-dist_electron/
-build/
-*.tsbuildinfo
-
-# Electron 历史残留 .js 空文件 (已改用 .cjs)
-electron/*.js
-
-# 临时备份文件
-_temp_*
-# AI agent / shell 临时脚本与日志
-_*.ps1
-_*.txt
-_*.log
-
-# Dependencies
-node_modules
-.pnp
-.pnp.js
-
-# Backend data(本地数据,不入库)
-data/
-input/
-output/
-thumbnails/
-backend/data/
-
-# Env
+# Environment variables
 .env
 .env.local
-.env.*.local
+.env.*
+!.env.example
 
-# OS
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
 Thumbs.db
+
+# Python related (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```
