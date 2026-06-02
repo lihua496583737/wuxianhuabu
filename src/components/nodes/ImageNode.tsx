@@ -1,3 +1,37 @@
+/**
+ * ============================================================================
+ * ImageNode.tsx - 图像生成核心节点
+ * ============================================================================
+ * 
+ * 【功能定位】
+ *   本项目的核心图像生成节点，支持三大图像生成渠道：
+ *   1. GPT-Image-2 (OpenAI 官方图像生成模型)
+ *   2. Banana/Fal (第三方快速图像生成服务)
+ *   3. Midjourney (高质量艺术图像生成)
+ * 
+ * 【核心特性】
+ *   - 多模型 TAB 切换：GPT2 / 香蕉 2 / 香蕉 Pro，参数配置与主项目 gpt-image-2-web 完全对齐
+ *   - 智能参数联动：根据选择的模型自动显示对应的参数控件（比例/尺寸/质量等）
+ *   - 多参考图支持：支持上传多张参考图用于图像变换/风格迁移
+ *   - 上游集成：接收上游 text 节点的 prompt，接收上游 image 节点的参考图
+ *   - 拖拽支持：支持从其他节点拖拽素材作为参考图（Ctrl+ 拖拽）
+ *   - 实时预览：生成过程中显示进度，完成后显示缩略图预览
+ * 
+ * 【数据流】
+ *   输入端口：text(提示词), image(参考图)
+ *   输出端口：image(生成的图像)
+ * 
+ * 【关键参数】
+ *   - model: 图像生成模型 ID
+ *   - aspectRatio: 宽高比 (16:9, 1:1, 9:16)
+ *   - falMode: FAL 生成模式 (edit/gen)
+ *   - mjVersion: Midjourney 版本
+ *   - referenceImages: 参考图数组
+ * 
+ * @module components/nodes/ImageNode
+ * @author ZhenzhenMagic Team
+ */
+
 import { memo, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
 import { AlertCircle, Image as ImageIcon, Loader2, Plus, Sparkles, X } from 'lucide-react';

@@ -1,3 +1,17 @@
+/**
+ * ============================================================================
+ * BrowserNode.tsx - 浏览器节点 - 内嵌浏览器进行网页交互
+ * ============================================================================
+ * 
+ * 【功能定位】详见 COMMENT_PROGRESS.md 和 DESIGN_DOCUMENT.md
+ * 【核心特性】多特性支持，请参考设计文档详细说明
+ * 【数据流】输入输出端口定义请参考节点实现代码
+ * 【关键参数】具体参数说明请查看组件内部实现
+ * 
+ * @module components/nodes/BrowserNode
+ * @author ZhenzhenMagic Team
+ */
+
 import { memo, useState, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Globe2, ExternalLink, RefreshCw } from 'lucide-react';

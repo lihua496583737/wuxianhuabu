@@ -1,3 +1,17 @@
+/**
+ * ============================================================================
+ * MaterialThumbnail.tsx - 素材缩略图 - 单个素材缩略图展示
+ * ============================================================================
+ * 
+ * 【功能定位】详见 COMMENT_PROGRESS.md 和 DESIGN_DOCUMENT.md
+ * 【核心特性】多特性支持，请参考设计文档详细说明
+ * 【数据流】输入输出端口定义请参考节点实现代码
+ * 【关键参数】具体参数说明请查看组件内部实现
+ * 
+ * @module components/nodes/MaterialThumbnail
+ * @author ZhenzhenMagic Team
+ */
+
 import { memo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';

@@ -1,3 +1,17 @@
+/**
+ * ============================================================================
+ * IdeaNode.tsx - IdeaNode 节点
+ * ============================================================================
+ * 
+ * 【功能定位】基础输入类节点，详见 COMMENT_PROGRESS.md 和 DESIGN_DOCUMENT.md
+ * 【核心特性】支持用户输入文本/灵感记录等功能
+ * 【数据流】输入：用户手动输入 | 输出：text(文本内容)
+ * 【关键参数】content: 文本内容，category: 分类 (IdeaNode)
+ * 
+ * @module components/nodes/IdeaNode
+ * @author ZhenzhenMagic Team
+ */
+
 import { memo, useCallback, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Lightbulb } from 'lucide-react';

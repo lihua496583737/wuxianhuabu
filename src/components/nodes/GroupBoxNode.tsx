@@ -1,3 +1,17 @@
+/**
+ * ============================================================================
+ * GroupBoxNode.tsx - 组容器节点 - 将多个节点组织成逻辑组
+ * ============================================================================
+ * 
+ * 【功能定位】详见 COMMENT_PROGRESS.md 和 DESIGN_DOCUMENT.md
+ * 【核心特性】多特性支持，请参考设计文档详细说明
+ * 【数据流】输入输出端口定义请参考节点实现代码
+ * 【关键参数】具体参数说明请查看组件内部实现
+ * 
+ * @module components/nodes/GroupBoxNode
+ * @author ZhenzhenMagic Team
+ */
+
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useReactFlow, useNodes, Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Play, X, Edit2 } from 'lucide-react';
