@@ -10,13 +10,13 @@ https://www.runninghub.cn/?inviteCode=rh-v1121
 My favorite girl Go YounJung
 # 🐧 贞贞的无限画布（企鹅共创版） · T8-penguin-canvas
 
-> AI 节点画布工作流工具 · Web + Electron 桌面端｜v2.0.9
+> AI 节点画布工作流工具 · Web + Electron 桌面端｜v2.1.0
 >
 > GitHub：<https://github.com/T8mars/T8-penguin-canvas>
 
 一个面向 AI 创作的 **节点式画布**：拖拽节点、连线编排、生成图像 / 视频 / 音频、调用 LLM、串接 RunningHub 工作流，叠加批量执行、智能对齐、打组、主题模板与终端日志。Web 浏览器和桌面端均可使用。
 
-![status](https://img.shields.io/badge/version-v2.0.9-brightgreen) ![node](https://img.shields.io/badge/node-%E2%89%A518-blue) ![react](https://img.shields.io/badge/react-19-61dafb) ![electron](https://img.shields.io/badge/electron-33-47848f) ![license](https://img.shields.io/badge/license-MIT-yellow)
+![status](https://img.shields.io/badge/version-v2.1.0-brightgreen) ![node](https://img.shields.io/badge/node-%E2%89%A518-blue) ![react](https://img.shields.io/badge/react-19-61dafb) ![electron](https://img.shields.io/badge/electron-33-47848f) ![license](https://img.shields.io/badge/license-MIT-yellow)
 
 ---
 
@@ -38,6 +38,7 @@ My favorite girl Go YounJung
 - 🎨 **50 个节点**，覆盖文本 / 图像 / 视频 / 音频 / LLM / RunningHub / ComfyUI / 3D / 工具 / 辅助 / 工具箱 / 输出预览 / 上传素材 / 素材集
 - 🧺 **画布级批量导入 + 素材合集打散**：上传节点支持一次选择多张图 / 多个视频 / 多段音频；也可直接把剪贴板或文件拖到画布，同类型多素材自动形成合集，上传和输出合集都可一键打散为多个独立素材节点
 - 👁️ **上传 / 输出图像原图悬停预览**（v1.8.7）：上传素材与输出素材的图像卡片在 hover 时显示小眼睛按钮，鼠标停在按钮上可按 100% 原尺寸预览，超出视口时自动等比收进可见区域，输出素材入口位于图像对比按钮下方
+- 🧾 **提示词模板库媒体套件**（v2.1.0）：图像 / 视频 / 音频 / 文本素材可从节点右键直接保存到提示词模板库，连同原 Prompt、标题、标签和配套媒体一起沉淀；模板库预览采用懒加载，图像缩略图 hover 可点小眼睛 100% 查看，避免大量模板一次性加载卡顿
 - 🧹 **生成节点上游素材单项排除**（v1.8.8）：图像 / 视频 / SD2.0 / 音频 / LLM / RunningHub / RH 工具节点的上游素材缩略图右下角可点 X，从当前节点排除单个传入素材但不切断连线，并可用“恢复N”一键恢复
 - 🗂️ **素材集节点 + 资源库整套复用**：可把同类型文本 / 图像 / 视频 / 音频合并为素材集，支持拖拽排序、反转 / 文件名 / 随机排序、导入素材集 / 导出素材集、保存到资源库、从资源库整套插入画布；未选中节点时按 `R` 可快速打开 / 关闭资源库
 - 🚚 **跨画布节点 / 素材发送 + Eagle 本地入库**：框选多个带连线节点可用“节点片段”发送到其他画布并保留内部连线；上传素材、输出素材或素材集仍支持智能保持 / 合并素材集 / 上传素材 / 拆分上传 / 输出素材，发送弹窗提供最近画布、发送历史和重复素材提示，发送后可自动切换并定位到新内容，资源库素材也可一键发送，Eagle 入库仅允许本机 localhost 接口
@@ -47,7 +48,7 @@ My favorite girl Go YounJung
 - 📁 **跨平台本地路径默认值**：Windows 继续默认 `D:\zhenzhen`，macOS / Linux 默认 `~/zhenzhen`；旧版非 Windows 配置若仍是硬编码默认值会自动迁移，自定义路径不会被覆盖
 - 🏷️ **生成提示词 @ 素材提及 + 大编辑器**：图像 / 视频 / SD2.0 / 音频 / LLM / RunningHub / RH 钱包应用 / RH 超市文本参数可输入 `@` 选择当前上游素材，输入框内显示统一对齐的小预览 chip，提交时稳定解析为 `@image1` / `@video1` / `@audio1`；聚焦提示词框按 `Alt+Enter` 或点击放大按钮可打开全局大编辑器，`Ctrl+Enter` 完成、`Esc` 取消。
 - 🏅 **主题成就与有效时长**：按主题记录有效使用时长、特色节点事件、资源保存与工作流保存，解锁勋章和影片馆占位奖励；奖励影片素材未提供前会显示“待解锁 / 影片素材待提供”，不写入提示词、短链、Cookie 或资源 URL 等敏感内容。
-- 🧰 **ComfyUI / RH 工具箱 / 云上传增强**：ComfyUI 内置基础文生图样例和导入检查清单，后端把缺模型、缺节点、未启动、workflow 校验失败等错误转成可执行提示；RH 工具箱生成图像 / 视频 / 文本 / 音频快捷接入位；COS / OSS 上传失败会返回签名、权限、Bucket / Region、网络等结构化排查建议。
+- 🧰 **ComfyUI / RH 工具箱 / 云上传增强**：ComfyUI 内置基础文生图样例和导入检查清单，后端把缺模型、缺节点、未启动、workflow 校验失败等错误转成可执行提示；默认只允许本机 ComfyUI，可信远端可通过单实例高危开关或 `T8_COMFYUI_ALLOW_REMOTE=1` 开启；RH 工具箱生成图像 / 视频 / 文本 / 音频快捷接入位；COS / OSS 上传失败会返回签名、权限、Bucket / Region、网络等结构化排查建议。
 - 📝 **文本节点自由缩放**：文本节点四角拖拽可独立调整宽高，输出端口固定贴合右侧中点，并在尺寸变化后刷新 ReactFlow internals，避免连线和端口脱离
 - 🔗 **RH 文本 NodeID 绑定**（v1.9.0）：文本节点可填写 RH 节点序号，RunningHub / RH 钱包应用 / RH 超市会按应用参数里的 RH nodeId 自动匹配上游文本；节点内也能手动选择绑定文本，冲突和错误序号会保留清晰状态提示
 - 🧩 **xyflow 12** 画布引擎：缩放、平移、连线、迷你地图、控制条、SPA 兜底
@@ -67,7 +68,7 @@ My favorite girl Go YounJung
 - 🧾 **文本分割二版**：文本分割节点支持段落 / 行 / 自定义分隔 / Markdown / 序号 / 智能分镜 / 正则高级 / 字数切块；按段落严格以至少一个空行切段，按行才逐行切分，内置模式说明、中文输入稳定编辑、双列预览布局、分段收藏、JSON 导入导出，并一键创建前置文本循环器链路；循环器执行完成后可自动打散为多个文本节点
 - 🖌️ **图层画板节点**（v1.9.0 增强）：工具分类开放画板节点，支持 16:9 / 9:16 等画布比例、空白图层、图层组折叠、可见 / 锁定状态、载入上游或本地图片、手绘 / 文字 / 图形 / 箭头、缩放旋转、套索 / 钢笔非破坏式抠图、放大编辑窗口、导入导出画板 JSON 与运行输出 PNG；放大窗口复用完整图层面板并按设备像素比重绘，避免图片被低清预览二次放大
 - 🔑 **分类独立 API Key 可选 · 默认折叠**（v1.2.6）：gpt-image / nano-banana / mj / veo / grok / seedance / suno 七个分类 Key 未填自动 fallback 贞贞通用 Key，新手默认折叠不被干扰
-- 🧭 **扩展 API 平台高级入口**（v1.9.5 强化）：API 设置页默认折叠的「扩展 API 平台【高级/可选】」可配置 OpenAI 兼容、ModelScope、火山引擎、本地 ComfyUI、即梦 CLI；ModelScope 图像生成新增 LoRA 管理与节点内多选，默认带 Infinite-Canvas 同步的 LoRA 列表，LLM 继续走稳定 `/v1/chat/completions`，火山 / ModelScope 会自动合并默认模型列表，即梦 CLI 支持只返回 submit_id 后继续查询下载图像 / 视频；ComfyUI 字段映射会清理非 fixed 的旧 value，保证 Prompt、上游图片、宽高等运行时输入真正生效
+- 🧭 **扩展 API 平台高级入口**（v1.9.5 强化）：API 设置页默认折叠的「扩展 API 平台【高级/可选】」可配置 OpenAI 兼容、ModelScope、火山引擎、ComfyUI、即梦 CLI；ModelScope 图像生成新增 LoRA 管理与节点内多选，默认带 Infinite-Canvas 同步的 LoRA 列表，LLM 继续走稳定 `/v1/chat/completions`，火山 / ModelScope 会自动合并默认模型列表，即梦 CLI 支持只返回 submit_id 后继续查询下载图像 / 视频；ComfyUI 字段映射会清理非 fixed 的旧 value，保证 Prompt、上游图片、宽高等运行时输入真正生效
 - 🧽 **去AI水印辅助节点**（已适配上游 0.8.9）：桥接 `wiltodelta/remove-ai-watermarks`，支持 Gemini / 豆包 / 即梦等可见水印识别去除、框选擦除（cv2 / LaMA）、来源自适应隐形水印、ControlNet 结构保留、可选 GFPGAN 脸部修复、AI 元数据检查 / 清理和来源鉴别
 - 🧲 **智能对齐辅助线 + snap-to-grid**：拖动时检测同列 / 同行 / 居中对齐并弱吸附
 - 📦 **GroupBox 打组**：框选 ≥2 节点一键套色框容器，可拖拽联动、整体执行、12 色调色板
@@ -121,11 +122,36 @@ npm run dev
 | RunningHub API Key | RunningHub 个人工作流 | `https://www.runninghub.cn` |
 | RH 钱包应用 APIKEY | RH 企业级共享 APIKEY（钱包应用专用） | `https://www.runninghub.cn` |
 | 扩展平台 API Key / Token | OpenAI 兼容、ModelScope、火山引擎、即梦 CLI 等高级来源 | 在「扩展 API 平台【高级/可选】」里按平台填写 Base URL / Token / AK/SK / CLI 路径 |
-| 本地 ComfyUI | 本机 ComfyUI 工作流、ComfyUI 超市、ComfyUI 应用制作工具 | 默认 `http://127.0.0.1:8188`，需先启动本机 ComfyUI |
+| ComfyUI | ComfyUI 工作流、ComfyUI 超市、ComfyUI 应用制作工具 | 默认 `http://127.0.0.1:8188`，需先启动 ComfyUI |
 
-传统 Key、扩展平台密钥和本地 ComfyUI 配置都会保存到 `data/settings.json`；前端 GET 接口仅返回 `****xxxx` 脱敏值或可用状态，明文仅供后端代理本地使用，永不泄露。ComfyUI 默认只允许连接本机 `localhost / 127.0.0.1` 服务。
+传统 Key、扩展平台密钥和 ComfyUI 配置都会保存到 `data/settings.json`；前端 GET 接口仅返回 `****xxxx` 脱敏值或可用状态，明文仅供后端代理本地使用，永不泄露。ComfyUI 默认只允许连接本机 `localhost / 127.0.0.1` 服务；如需接入其他可信地址，可以在 API 设置里为该 ComfyUI 配置开启“允许远端地址”高危开关，也可以在后端运行环境中设置 `T8_COMFYUI_ALLOW_REMOTE=1`。随附的 Docker Compose 部署已启用该变量，便于容器后端连接其他主机或容器中的 ComfyUI。
 
 > **不需要全部配置**：只填需要使用的那一类即可，其它节点会在运行时友好提示「未配置 XXX API Key」。
+
+---
+
+## 🐳 Docker 部署（Web + 后端）
+
+Docker 部署只运行 Web 前端和 Express 后端，不包含 Electron 桌面端。默认对外暴露 `18766` 端口，数据保存在挂载的 `userdata` 目录。
+
+```bash
+docker compose up -d --build
+```
+
+启动后访问：
+
+- Web：<http://127.0.0.1:18766>
+- 健康检查：<http://127.0.0.1:18766/api/status>
+
+随附的 `docker-compose.yml` 已启用远端 ComfyUI 访问，便于容器内后端连接其他主机或容器中的 ComfyUI：
+
+```yml
+T8_COMFYUI_ALLOW_REMOTE: "1"
+```
+
+注意：Docker 容器里的 `localhost` 指容器自身，不是宿主机。ComfyUI 地址必须从容器网络视角可访问；如需连接宿主机或其他网络中的 ComfyUI，请填写容器能访问到的地址，并只在可信网络中开启远端访问。不需要全局远端 ComfyUI 时，可移除或设为 `T8_COMFYUI_ALLOW_REMOTE: "0"`，再在 API 设置里按单个 ComfyUI 配置手动开启高危开关。
+
+致谢：感谢 [@fm9394](https://github.com/fm9394) 在 [PR #11](https://github.com/T8mars/T8-penguin-canvas/pull/11) 中提供 Remote ComfyUI 与 Docker 部署方向。本版在保留默认本机安全策略的基础上，将远端访问收口为显式高危开关，并补齐 Web + 后端 Docker 部署说明。
 
 ---
 

@@ -564,6 +564,10 @@ const AudioNode = ({ id, data, selected }: NodeProps) => {
                 data-drag-url={t.audioUrl}
                 data-drag-preview={t.audioUrl}
                 data-drag-node-id={id}
+                data-resource-title={t.title || t.audioUrl.split('/').pop() || '生成音频'}
+                data-prompt-template-kind="video"
+                data-prompt-template-category="video-music-audio"
+                data-prompt-template-prompt={d?.lastPrompt || localPrompt}
                 onMouseDown={(e) => beginMaterialDrag(e, { kind: 'audio', url: t.audioUrl, sourceNodeId: id, previewUrl: t.audioUrl })}
                 title="按住 Ctrl 拖拽到其他节点"
               />

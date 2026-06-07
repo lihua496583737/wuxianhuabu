@@ -106,6 +106,7 @@ export interface AdvancedProviderConfig {
   protocol: AdvancedProviderProtocol;
   baseUrl?: string;
   enabled?: boolean;
+  allowRemote?: boolean;
   apiKey?: string;
   hasApiKey?: boolean;
   imageModels?: string[];

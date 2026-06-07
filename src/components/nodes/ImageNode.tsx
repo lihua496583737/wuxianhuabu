@@ -1938,6 +1938,11 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             data-drag-url={imageUrl}
             data-drag-preview={imageUrl}
             data-drag-node-id={id}
+            data-resource-title={imageUrl.split('/').pop() || '生成图像'}
+            data-prompt-template-kind="image"
+            data-prompt-template-category="image-reference-edit"
+            data-prompt-template-prompt={d?.lastPrompt || localPrompt || String(providerParams.prompt ?? providerParams.positive ?? '')}
+            data-prompt-template-negative={String(providerParams.negative ?? providerParams.negativePrompt ?? '')}
             onMouseDown={(e) =>
               beginMaterialDrag(e, { kind: 'image', url: imageUrl, sourceNodeId: id, previewUrl: imageUrl })
             }

@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CloudUpload, FolderPlus, Library, Plus, X } from 'lucide-react';
+import { BookmarkPlus, CloudUpload, FolderPlus, Library, Plus, X } from 'lucide-react';
 import { useThemeStore } from '../stores/theme';
 import { useCanvasStore } from '../stores/canvas';
 import { trackAchievementEvent } from '../stores/achievements';
 import * as api from '../services/api';
 import type { CloudUploadTargetConfig } from '../types/canvas';
 import type { ResourceCategory, ResourceKind, ResourceMaterialSetKind, ResourceMediaKind } from '../services/api';
+import type { PromptTemplateKind } from '../data/promptTemplateLibrary';
+import {
+  createPromptTemplateFromMaterial,
+  loadPromptTemplateUserState,
+  savePromptTemplateUserState,
+} from '../services/promptTemplateLibrary';
 import SmartImage from './SmartImage';
 
 interface MenuState {
@@ -18,6 +24,10 @@ interface MenuState {
   title?: string;
   materialSetKind?: ResourceMaterialSetKind;
   materialSetItems?: NonNullable<Parameters<typeof api.addResourceSet>[0]['materialSetItems']>;
+  promptTemplateKind?: PromptTemplateKind;
+  promptTemplateCategoryId?: string;
+  promptTemplatePrompt?: string;
+  promptTemplateNegative?: string;
 }
 
 function isResourceKind(value: string | null): value is ResourceMediaKind {
@@ -32,6 +42,10 @@ function baseName(url: string) {
   } catch {
     return url.split('/').pop() || '资源';
   }
+}
+
+function normalizePromptTemplateKind(value: string | null, fallback: PromptTemplateKind): PromptTemplateKind {
+  return value === 'image' || value === 'video' ? value : fallback;
 }
 
 export default function MaterialContextMenu() {
@@ -86,6 +100,13 @@ export default function MaterialContextMenu() {
         previewUrl: source.getAttribute('data-drag-preview') || url,
         sourceNodeId: source.getAttribute('data-drag-node-id') || '',
         title: source.getAttribute('data-resource-title') || source.getAttribute('alt') || baseName(url),
+        promptTemplateKind: normalizePromptTemplateKind(
+          source.getAttribute('data-prompt-template-kind'),
+          kind === 'image' ? 'image' : 'video',
+        ),
+        promptTemplateCategoryId: source.getAttribute('data-prompt-template-category') || '',
+        promptTemplatePrompt: source.getAttribute('data-prompt-template-prompt') || '',
+        promptTemplateNegative: source.getAttribute('data-prompt-template-negative') || '',
       };
       setMenu(next);
       setMessage('');
@@ -171,6 +192,37 @@ export default function MaterialContextMenu() {
     } else {
       setMessage(r.error || '加入失败');
     }
+  };
+
+  const saveToPromptTemplate = () => {
+    if (!menu || menu.kind === 'set' || !menu.url) return;
+    let prompt = (menu.promptTemplatePrompt || '').trim();
+    if (!prompt) {
+      prompt = window.prompt('没有检测到这个素材的提示词，请补充后保存到模板库：', '')?.trim() || '';
+    }
+    if (!prompt) {
+      setMessage('未保存：缺少提示词');
+      return;
+    }
+    const titleBase = (menu.title || baseName(menu.url)).replace(/\.[a-z0-9]{2,8}$/i, '').trim();
+    const item = createPromptTemplateFromMaterial({
+      mediaKind: menu.kind as ResourceMediaKind,
+      url: menu.url,
+      previewUrl: menu.previewUrl,
+      prompt,
+      negative: menu.promptTemplateNegative,
+      title: titleBase || prompt.slice(0, 32),
+      templateKind: menu.promptTemplateKind,
+      categoryId: menu.promptTemplateCategoryId,
+      sourceNodeId: menu.sourceNodeId,
+    });
+    const current = loadPromptTemplateUserState();
+    savePromptTemplateUserState({
+      ...current,
+      customItems: [item, ...current.customItems],
+    });
+    window.dispatchEvent(new CustomEvent('penguin:prompt-templates-changed', { detail: { id: item.id } }));
+    setMessage(`已保存到提示词模板库：${item.titleZh}`);
   };
 
   const createCategory = async () => {
@@ -263,6 +315,24 @@ export default function MaterialContextMenu() {
       {menu.kind === 'set' && (
         <div className={`px-3 py-2 text-[11px] ${isPixel ? 'bg-[var(--px-muted)]' : isDark ? 'bg-white/5 text-white/65' : 'bg-black/5 text-zinc-600'}`}>
           {menu.title || '素材集'} · {menu.materialSetItems?.length || 0} 项
+        </div>
+      )}
+      {menu.kind !== 'set' && (
+        <div
+          className="py-1"
+          style={{
+            borderBottom: isPixel ? '2px solid #1A1410' : `1px solid ${isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'}`,
+          }}
+        >
+          <button className={itemCls} onClick={saveToPromptTemplate}>
+            <BookmarkPlus size={12} />
+            <span className="truncate">保存到提示词模板库</span>
+          </button>
+          {!menu.promptTemplatePrompt && (
+            <div className={`px-3 pb-1 text-[10px] ${isPixel ? 'opacity-75' : isDark ? 'text-white/45' : 'text-zinc-500'}`}>
+              未检测到来源提示词时会询问补充。
+            </div>
+          )}
         </div>
       )}
       <div className="max-h-56 overflow-y-auto py-1">

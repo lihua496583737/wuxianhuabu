@@ -87,7 +87,7 @@ const ADVANCED_PROVIDER_LABELS: Record<AdvancedProviderProtocol, string> = {
   'openai-compatible': 'OpenAI 兼容',
   modelscope: 'ModelScope',
   volcengine: '火山引擎',
-  comfyui: '本地 ComfyUI',
+  comfyui: 'ComfyUI',
   'jimeng-cli': '即梦 CLI',
 };
 
@@ -128,10 +128,10 @@ const ADVANCED_PROVIDER_GUIDES: Record<AdvancedProviderProtocol, {
     keyLabel: '方舟 Ark API Key（生成用，不是 AK/SK）',
   },
   comfyui: {
-    subtitle: '接入本机 ComfyUI 工作流',
-    description: '适合把本机 ComfyUI 的 API Workflow 接到图像节点。为安全起见这里只允许本机地址。',
+    subtitle: '接入 ComfyUI 工作流',
+    description: '默认适合把本机 ComfyUI 的 API Workflow 接到图像节点；开启高危远端开关或由后端环境启用后，也可接入其他可信 ComfyUI 地址。',
     nodeScopes: ['图像节点'],
-    connectionHint: '实例地址填本机 ComfyUI，例如 http://127.0.0.1:8188。多个实例可一行一个。',
+    connectionHint: '默认填写本机 ComfyUI，例如 http://127.0.0.1:8188；如需其他地址，可开启下方高危开关，或由后端设置 T8_COMFYUI_ALLOW_REMOTE=1。多个实例可一行一个。',
     modelHint: '图像节点里选择的是工作流 ID/名称，不需要填写模型列表。',
     baseUrlPlaceholder: 'http://127.0.0.1:8188',
   },
@@ -1521,6 +1521,28 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
                 placeholder={guide?.baseUrlPlaceholder || 'http://127.0.0.1:8188'}
               />
             </label>
+            <label
+              className={
+                isPixel
+                  ? `t8-api-settings-guide border p-3 flex items-start gap-2 text-[11px] leading-relaxed ${labelCls}`
+                  : `t8-api-settings-guide rounded-lg border p-3 flex items-start gap-2 text-[11px] leading-relaxed ${labelCls}`
+              }
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={!!provider.allowRemote}
+                onChange={(e) => updateAdvancedProvider(provider.id, { allowRemote: e.target.checked })}
+              />
+              <span className="min-w-0">
+                <span className="font-black inline-flex items-center gap-1">
+                  <Lock size={11} /> 高危：允许此 ComfyUI 配置访问远端地址
+                </span>
+                <span className={`block mt-1 ${hintCls}`}>
+                  默认关闭，仅允许 127.0.0.1 / localhost。开启后后端会按这里填写的 URL 访问局域网或公网 ComfyUI，请只连接你信任和有权限使用的服务；Docker 也可通过环境变量 T8_COMFYUI_ALLOW_REMOTE=1 统一开启。
+                </span>
+              </span>
+            </label>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <label className="space-y-1">
                 <span className={`text-[11px] ${labelCls}`}>工作流 ID</span>
@@ -2186,7 +2208,7 @@ export default function ApiSettingsModal({ open, onClose }: ApiSettingsModalProp
             {advancedOpen && (
               <div className="mt-3 space-y-3">
                 <div className={`text-[11px] leading-relaxed ${hintCls}`}>
-                  这里不是必填项。它只用于 ModelScope、火山引擎、本地 ComfyUI、即梦 CLI 和 OpenAI 兼容接口；平台开启后，还需要在具体节点的“高级来源”里选择它才会生效。
+                  这里不是必填项。它只用于 ModelScope、火山引擎、ComfyUI、即梦 CLI 和 OpenAI 兼容接口；平台开启后，还需要在具体节点的“高级来源”里选择它才会生效。
                   当前状态：已启用 {advancedSummary.enabledCount} 个，已配置密钥 {advancedSummary.configuredKeyCount} 个，ComfyUI {advancedSummary.comfyuiConfigured ? '已填写地址' : '未填写地址'}，即梦 CLI {advancedSummary.jimengConfigured ? '已填写路径' : '未填写路径'}。
                 </div>
                 {advancedProvidersInput.length === 0 ? (

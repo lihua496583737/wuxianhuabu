@@ -1144,6 +1144,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     data-drag-url={u}
                     data-drag-preview={u}
                     data-drag-node-id={id}
+                    data-resource-title={u.split('/').pop() || '助手图像'}
+                    data-prompt-template-kind="image"
+                    data-prompt-template-category="image-reference-edit"
+                    data-prompt-template-prompt={t.text || localPrompt}
                     onMouseDown={(e) => beginMaterialDrag(e, { kind: 'image', url: u, sourceNodeId: id, previewUrl: u })}
                     className="w-12 h-12 object-cover rounded border border-white/10 cursor-grab"
                     title="按住 Ctrl 拖拽到其他节点"
@@ -1165,6 +1169,10 @@ const LLMNode = ({ id, data, selected }: NodeProps) => {
                     data-drag-url={u}
                     data-drag-preview={u}
                     data-drag-node-id={id}
+                    data-resource-title={u.split('/').pop() || '助手视频'}
+                    data-prompt-template-kind="video"
+                    data-prompt-template-category="video-image-to-video"
+                    data-prompt-template-prompt={t.text || localPrompt}
                     onMouseDown={(e) => beginMaterialDrag(e, { kind: 'video', url: u, sourceNodeId: id, previewUrl: u })}
                     className="w-20 h-12 object-cover rounded border border-white/10 cursor-grab"
                     title="按住 Ctrl 拖拽到其他节点"

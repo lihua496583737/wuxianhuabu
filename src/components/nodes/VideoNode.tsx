@@ -1321,6 +1321,10 @@ const VideoNode = ({ id, data, selected }: NodeProps) => {
             data-drag-url={videoUrl}
             data-drag-preview={videoUrl}
             data-drag-node-id={id}
+            data-resource-title={videoUrl.split('/').pop() || '生成视频'}
+            data-prompt-template-kind="video"
+            data-prompt-template-category="video-image-to-video"
+            data-prompt-template-prompt={d?.lastPrompt || localPrompt}
             onMouseDown={(e) => beginMaterialDrag(e, { kind: 'video', url: videoUrl, sourceNodeId: id, previewUrl: videoUrl })}
             title="按住 Ctrl 拖拽到其他节点"
           />

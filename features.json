@@ -1,7 +1,48 @@
 {
   "$schema": "本文件为 T8-penguin-canvas 节点清单防丢失锁,任何节点删减都需要在 roadmap.md 中说明并更新本文件。",
-  "version": "2.0.9",
-  "lastUpdated": "2026-06-07-veo-omni-action-director-electron-release",
+  "version": "2.1.0",
+  "lastUpdated": "2026-06-07-source-prompt-library-remote-comfyui",
+  "sourceReleaseV210": {
+    "version": "2.1.0",
+    "status": "source-only",
+    "date": "2026-06-07",
+    "description": "v2.1.0 源码发布：提示词模板库升级为可携带图像 / 视频 / 音频配套素材的媒体模板库，Remote ComfyUI 收口为默认关闭的高危开关，并补齐 Web + 后端 Docker 部署入口。本次按用户要求只推 GitHub 源码并合并 main，不打包 Electron，不创建或更新 GitHub Release 自动更新资产。",
+    "highlights": [
+      "提示词模板库支持从图像、视频、音频、文本、输出素材和素材集右键保存模板，自动带入原 Prompt、标题、标签、媒体类型和配套媒体引用。",
+      "模板库预览改为轻量懒加载策略，图像缩略图右上角 hover 显示小眼睛，可按 100% 查看原图细节，避免模板数量过多时首屏卡顿。",
+      "全局提示词模板服务补齐媒体附件协议、导入导出兼容和资源库保存链路，旧纯文字模板继续兼容。",
+      "Remote ComfyUI 默认保持关闭，仅允许 localhost / 127.0.0.1；可信远端地址必须通过单个 ComfyUI 配置的 allowRemote 高危开关，或后端环境变量 T8_COMFYUI_ALLOW_REMOTE / T8_COMFYUI_ALLOW_PRIVATE 显式开启。",
+      "新增 Dockerfile、docker-compose.yml 与 .dockerignore，Docker 部署只包含 Web 前端 + Express 后端，不包含 Electron；compose 默认挂载 userdata 并开启容器场景所需的远端 ComfyUI 环境变量。",
+      "ComfyUI 地址安全校验集中到 backend/src/providers/comfyuiAccess.js，registry 归一化、连接测试和真实运行共用同一策略，避免配置 UI 与后端执行分裂。",
+      "感谢 @fm9394 在 PR #11 中提供 Remote ComfyUI 与 Docker 部署方向；本版参考其目标后重新按项目安全边界实现，保留默认本机安全策略。"
+    ],
+    "prAcknowledgement": {
+      "pullRequest": "https://github.com/T8mars/T8-penguin-canvas/pull/11",
+      "author": "fm9394",
+      "note": "感谢 PR #11 对 Remote ComfyUI 与 Docker 部署方向的贡献；本次公开版本采用默认关闭的高危开关方案，兼容环境变量，不直接放开所有远端地址。"
+    },
+    "sourceSync": [
+      "package.json / package-lock.json",
+      "vite.config.ts / vite.config.js",
+      "electron/main.cjs APP_VERSION",
+      "backend/src/config.js APP_VERSION",
+      "features.json",
+      "README.md",
+      "release-notes/v2.1.0.md"
+    ],
+    "releaseBoundary": [
+      "本次只推 GitHub 源码并合并 main，不运行 npm run dist:release，不打包 Electron，不发布 GitHub Release 或 latest.yml。",
+      "公开提交继续禁止 skill.md、roadmap.md、local-private/** 和任何私有计费/支付/充值实现进入 GitHub。",
+      "Docker 产物面向 Web + 后端源码部署；Electron 自动更新包如需发布，必须后续重新走 clean public worktree 与正式 release 流程。"
+    ],
+    "verification": [
+      "node --test tests\\promptTemplateLibrary.test.ts tests\\advancedProviders.test.ts tests\\comfyuiProvider.test.ts tests\\externalProvidersRoute.test.ts tests\\dockerComposeConfig.test.ts",
+      "npm run type-check",
+      "npm run build",
+      "npm run public:check",
+      "git diff --check"
+    ]
+  },
   "electronReleaseV209": {
     "version": "2.0.9",
     "status": "electron-release",
@@ -272,10 +313,10 @@
     ]
   },
   "promptTemplateLibrary": {
-    "version": "2.0.5",
+    "version": "2.1.0",
     "status": "implemented",
     "roadmap": "roadmap.md::全局提示词模板库（参考 Infinite-Canvas）",
-    "description": "全局图像/视频提示词模板库，参考 Infinite-Canvas 模板按钮体验，面向创作者提供可检索、可管理、可导入导出、可保存资源库的高价值 Prompt 起点。",
+    "description": "全局图像/视频提示词模板库，参考 Infinite-Canvas 模板按钮体验，面向创作者提供可检索、可管理、可导入导出、可保存资源库的高价值 Prompt 起点；v2.1.0 起自定义模板可携带 image/video/audio 配套素材附件，图像、视频、音频、输出素材可右键连同原 Prompt 一起保存到模板库。",
     "topLevelKinds": [
       "image",
       "video"
@@ -334,12 +375,14 @@
       "src/data/promptTemplateLibrary.ts",
       "src/services/promptTemplateLibrary.ts",
       "src/components/PromptTemplateLibraryModal.tsx",
+      "src/components/MaterialContextMenu.tsx",
       "src/components/PromptTextarea.tsx",
-      "src/components/nodes/MentionPromptInput.tsx"
+      "src/components/nodes/MentionPromptInput.tsx",
+      "src/components/nodes/OutputNode.tsx"
     ],
     "storage": {
       "customLibrary": "localStorage:t8-prompt-template-library-v1",
-      "resourceLibrarySave": "api.addResourceSet({ materialSetKind:'text' })，优先保存到资源库 set 分类「提示词模板」",
+      "resourceLibrarySave": "api.addResourceSet({ materialSetKind:'text' })，优先保存到资源库 set 分类「提示词模板」；若模板带 image/video/audio 附件，会把配套素材一并保存为素材集成员，并额外写入 metadata JSON 便于后续恢复。",
       "importExportSchema": "t8-prompt-template-library"
     },
     "capabilities": [
@@ -353,14 +396,18 @@
       "替换/追加/正负向完整套用",
       "复制正向/复制正负向",
       "导入/导出我的模板 JSON",
-      "保存模板到资源库文本素材集"
+      "保存模板到资源库文本素材集",
+      "自定义模板保留 image/video/audio 轻量媒体附件协议",
+      "节点素材右键保存到提示词模板库",
+      "模板详情仅加载当前模板附件，图片附件 hover 小眼睛可 100% 查看"
     ],
     "integration": [
       "PromptTextarea 增加 promptTemplateKind 可选入口",
       "MentionPromptInput 增加 promptTemplateKind 可选入口，并保持 @ 图像/视频/音频素材引用可用",
-      "图像、视频、SD2.0、音频、LLM、3D 全景、预设图像、文本节点、RunningHub、RH 工具箱、ComfyUI 超市参数已接入"
+      "图像、视频、SD2.0、音频、LLM、3D 全景、预设图像、文本节点、RunningHub、RH 工具箱、ComfyUI 超市参数已接入",
+      "图像、视频、SD2.0、音频、LLM 和输出素材把生成 Prompt 写入 data-prompt-template-*，供右键保存模板使用"
     ],
-    "developerRule": "后续新增面向创作的 prompt 输入框时，优先使用 PromptTextarea 或 MentionPromptInput 并传入 promptTemplateKind='image' 或 'video'；配置型 JSON/列表字段不要显示模板库按钮。新增内置小类必须同步 tests/promptTemplateLibrary.test.ts，保证每个内置小类至少 100 条模板，且同类标题/正文不重复；用户可见标题不能出现 Infinite-Canvas 等上游来源前缀，也不能用 21:9、2x2、3x3 这类规格数字开头；视频模板必须写成 Seedance 可执行结构：主体与动作、场景与氛围、镜头执行、时间节奏、稳定约束，禁止只写地点、情绪、风格或“创作目标”；严禁用机械换词凑数量。",
+    "developerRule": "后续新增面向创作的 prompt 输入框时，优先使用 PromptTextarea 或 MentionPromptInput 并传入 promptTemplateKind='image' 或 'video'；配置型 JSON/列表字段不要显示模板库按钮。新增媒体素材卡片若有生成 Prompt，应补 data-prompt-template-kind/category/prompt/negative 属性，让右键保存到模板库能带走配套素材。新增内置小类必须同步 tests/promptTemplateLibrary.test.ts，保证每个内置小类至少 100 条模板，且同类标题/正文不重复；用户可见标题不能出现 Infinite-Canvas 等上游来源前缀，也不能用 21:9、2x2、3x3 这类规格数字开头；视频模板必须写成 Seedance 可执行结构：主体与动作、场景与氛围、镜头执行、时间节奏、稳定约束，禁止只写地点、情绪、风格或“创作目标”；严禁用机械换词凑数量。"
     "verification": [
       "node --test tests\\promptTemplateLibrary.test.ts",
       "node --test tests\\promptEditor.test.ts tests\\promptTemplateLibrary.test.ts",
@@ -506,11 +553,11 @@
       "T8_RUNTIME_CACHE_DIR": "可选，覆盖运行时归档解压缓存目录；默认打包模式为 %APPDATA%/t8-penguin-canvas/runtime-cache",
       "T8_ENABLE_LOCAL_PRIVATE": "可选，0=强制关闭本机 local-private/extensions 私有扩展；默认只要本机 ignored 私有扩展存在，开发环境和本机打包 release 都会自动带入。GitHub/clean clone 因为没有 local-private 目录，所以不会带充值实现。"
     },
-    "version": "2.0.9",
-    "semverVersion": "2.0.9",
+    "version": "2.1.0",
+    "semverVersion": "2.1.0",
     "versionNumberPolicy": "T8 版本号仍采用 x.y.z 三段，但每一段只允许 0-9；任一段到 9 后下一次发布必须向左进位，禁止任一段出现两位数字。例：1.9.9 的下一版必须是 2.0.0。",
-    "versionNote": "v1.3.0 起统一采用三段阶段号 x.y.z；当前源码版本为 v2.0.9：集中发布 3D 全景导演台后续能力、Sora2 Zhenzhen API 双通道、独立 Sora2 Key、Veo Omni 默认模型、上传 20MB 上限和画布崩溃恢复。本次按规范打包 Electron 并发布 GitHub Release 自动更新资产；GitHub 公开源码仍排除本地私有计费/支付/充值实现。",
-    "installer": "v2.0.9 按 npm run dist:release 生成 T8-PenguinCanvas-Setup-2.0.9.exe、.exe.blockmap 与 latest.yml，并发布 GitHub Release 自动更新资产；安装继续走前台 NSIS 向导，保留桌面和开始菜单快捷方式。",
+    "versionNote": "v1.3.0 起统一采用三段阶段号 x.y.z；当前源码版本为 v2.1.0：集中发布提示词模板库媒体附件、素材右键保存模板、模板懒加载预览、Remote ComfyUI 高危开关和 Docker Web+后端部署。本次只推 GitHub 源码并合并 main，不打包 Electron，不发布 GitHub Release 自动更新资产；GitHub 公开源码仍排除本地私有计费/支付/充值实现。",
+    "installer": "v2.1.0 为 source-only 版本，不生成 T8-PenguinCanvas-Setup-2.1.0.exe、.blockmap 或 latest.yml；如需 Electron 自动更新包，后续必须重新走 clean public worktree + npm run dist:release + npm run release:verify。",
     "updaterInstallMode": "自动更新下载完成后不得静默安装：main.cjs 必须设置 autoInstallOnAppQuit=false，显式安装调用 quitAndInstall(false,true)；electron/build-resources/installer.nsh 通过 SetSilent normal 让新版 NSIS 安装器即使收到旧客户端传入的 /S 也尽量切回前台安装向导。",
     "installerShortcutPolicy": "安装完成后必须创建桌面和开始菜单快捷方式：package.json build.nsis.createDesktopShortcut 必须为 \"always\"，createStartMenuShortcut 必须为 true；electron/build-resources/installer.nsh 必须保留 customInstall 兜底 CreateShortCut \"$newStartMenuLink\" 与 \"$DESKTOP\\${SHORTCUT_NAME}.lnk\"，防止更新安装/keepShortcuts 路径遗漏入口。",
     "updaterEntryPolicy": "顶栏桌面更新入口不得只因 window.t8pc.updater 缺失就静默消失；Electron UA 或 t8pc.getInfo/openExternal 可用时必须显示诊断入口，提示重新安装完整桌面包，Web/纯浏览器环境才隐藏。状态为 not-available 时按钮仍保留“更新”字样，避免用户误以为自动更新入口被删除。",
@@ -532,7 +579,7 @@
       "prePushScan": "每次推送前运行 npm run public:check，并检查 staged 文件不包含 roadmap.md、skill.md、私有扩展目录、私有 UI、私有路由、支付路径、密钥字段或中文充值实现；本地开发和打包若需要私有能力，只能通过 ignored local-private/extensions 扩展加载。"
     },
     "localPrivateExtensions": {
-      "status": "implemented-v2.0.9-release",
+      "status": "implemented-v2.1.0-source",
       "purpose": "把本机私有计费/支付能力从已跟踪公开文件中拆出，避免每次 Git 推送都需要手动拆 hunk。",
       "publicHooks": [
         "backend/src/extensions/localExtensions.js 只负责发现并注册本地私有后端扩展，不包含具体业务逻辑。",
@@ -544,7 +591,7 @@
         ".gitignore 统一忽略 /local-private/**，旧私有路由和私有 UI 路径仍保持忽略兜底。",
         "scripts/check-public-clean.cjs / npm run public:check 会扫描 staged 路径和 diff，防止误提交私有文件或实现关键字。",
         "公开文件 backend/src/config.js、backend/src/server.js、src/App.tsx、src/services/api.ts、electron/_post_build.cjs 不应再保留私有业务 diff。",
-        "v2.0.9 发布时继续用 scripts/check-public-clean.cjs 扫描 staged 路径和新增文本，skill.md / roadmap.md / local-private/** 不进入公开提交。"
+        "v2.1.0 源码推送时继续用 scripts/check-public-clean.cjs 扫描 staged 路径和新增文本，skill.md / roadmap.md / local-private/** 不进入公开提交。"
       ]
     },
     "checklist": [
