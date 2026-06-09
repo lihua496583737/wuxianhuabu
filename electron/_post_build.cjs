@@ -300,6 +300,33 @@ function checkNoRhToolboxMaker() {
   console.log('  ✅ RH toolbox maker is not present in packaged resources');
 }
 
+function checkNoFalToolboxMaker() {
+  const forbiddenDirs = [
+    path.join(RES, 'tools', 'fal-toolbox-maker'),
+    path.join(RES, 'fal-toolbox-maker'),
+    path.join(RES, 'app', 'fal-toolbox-maker'),
+    path.join(RES, 'app.asar.unpacked', 'fal-toolbox-maker'),
+  ];
+  for (const p of forbiddenDirs) {
+    if (fs.existsSync(p)) {
+      failSecurity('FAL toolbox maker must not be shipped to end users:', p);
+    }
+  }
+
+  const forbiddenText = [
+    /FalToolboxMakerNode/,
+    /FAL应用制作工具/,
+    /fal-toolbox-maker/,
+  ];
+  for (const p of walkFiles(path.join(RES, 'frontend')).filter(isSmallTextFile)) {
+    const text = fs.readFileSync(p, 'utf-8');
+    if (forbiddenText.some((re) => re.test(text))) {
+      failSecurity('FAL toolbox maker frontend code leaked into packaged assets:', p);
+    }
+  }
+  console.log('  ✅ FAL toolbox maker is not present in packaged resources');
+}
+
 function main() {
   console.log('==========================================');
   console.log('[post-build] 验证打包产物');
@@ -388,10 +415,13 @@ function main() {
   console.log('\n[9] RH工具箱制作器分发检查:');
   checkNoRhToolboxMaker();
 
-  console.log('\n[10] GitHub 自动更新资产:');
+  console.log('\n[10] FAL应用制作工具分发检查:');
+  checkNoFalToolboxMaker();
+
+  console.log('\n[11] GitHub 自动更新资产:');
   checkUpdateArtifacts();
 
-  console.log('\n[10] resources/ 完整结构:');
+  console.log('\n[12] resources/ 完整结构:');
   listDir(RES);
 
   if (missingCount > 0) {

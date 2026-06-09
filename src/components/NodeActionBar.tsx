@@ -28,7 +28,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
     // v1.2.10.1: RH 工具节点
-    'rh-tools', 'rh-toolbox', 'comfyui-store',
+    'rh-tools', 'rh-toolbox', 'fal-toolbox', 'comfyui-store',
   'resize', 'upscale', 'grid-crop', 'grid-editor', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
   'panorama-3d',
   'frame-extractor', 'frame-pair',
@@ -54,6 +54,7 @@ const ACTION_COLORS: Record<string, { run: string; stop: string; close: string }
   yyh: { run: '#52ff9a', stop: '#ffb84d', close: '#ff4f7b' },
   'soccer-hero': { run: '#1f9f4a', stop: '#f5d550', close: '#d64242' },
   'dragon-ball': { run: '#ffb000', stop: '#38bdf8', close: '#dc2626' },
+  'saint-seiya': { run: '#f8c84a', stop: '#2dd4bf', close: '#b4232f' },
 };
 
 const NodeActionBar = () => {

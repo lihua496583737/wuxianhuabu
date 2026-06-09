@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Library, Palette, Skull, Sailboat, BookOpen } from 'lucide-react';
+import { Moon, Settings, Sun, Wifi, WifiOff, Sparkles, Cloud, ExternalLink, Copy, Check, Gift, Heart, Youtube, PlayCircle, Bell, Wand2, Globe, MessageCircle, CalendarDays, Rocket, Library, Palette, Skull, Sailboat, BookOpen, Shield, Crown } from 'lucide-react';
 import { useThemeStore } from './stores/theme';
 import { seedDragonBallRadarForShenronTest, useDragonBallRadarStore } from './stores/dragonBallRadar';
+import { seedSaintSeiyaGoldClothsForHadesTest, useSaintSeiyaSanctuaryStore } from './stores/saintSeiyaSanctuary';
 import { trackAchievementEvent } from './stores/achievements';
 import { useApiKeysStore } from './stores/apiKeys';
 import { useShortcutStore } from './stores/shortcuts';
@@ -449,9 +450,13 @@ function App() {
   const isSlamdunk = currentTemplate.visuals?.style === 'slamdunk';
   const isSoccer = currentTemplate.visuals?.style === 'soccer-hero';
   const isDragonBall = currentTemplate.visuals?.style === 'dragon-ball';
+  const isSaintSeiya = currentTemplate.visuals?.style === 'saint-seiya';
   const shenronUnlockedAt = useDragonBallRadarStore((state) => state.shenronUnlockedAt);
   const shenronModeActive = useDragonBallRadarStore((state) => state.shenronModeActive);
   const setShenronModeActive = useDragonBallRadarStore((state) => state.setShenronModeActive);
+  const hadesUnlockedAt = useSaintSeiyaSanctuaryStore((state) => state.hadesUnlockedAt);
+  const hadesModeActive = useSaintSeiyaSanctuaryStore((state) => state.hadesModeActive);
+  const setHadesModeActive = useSaintSeiyaSanctuaryStore((state) => state.setHadesModeActive);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === 'undefined') return;
@@ -463,6 +468,16 @@ function App() {
     window.history.replaceState(null, document.title, `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('t8SaintSeiya') !== 'hades') return;
+    seedSaintSeiyaGoldClothsForHadesTest();
+    params.delete('t8SaintSeiya');
+    const query = params.toString();
+    window.history.replaceState(null, document.title, `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+  }, []);
+
   const handleDragonBallModeSwitch = (active: boolean) => {
     setShenronModeActive(active);
     if (active && !shenronModeActive) {
@@ -470,6 +485,18 @@ function App() {
         type: 'hidden_mode.enabled',
         theme: 'dragon-ball',
         kind: 'dragon-ball-shenron',
+        mode: 'enabled',
+      });
+    }
+  };
+
+  const handleSaintSeiyaModeSwitch = (active: boolean) => {
+    setHadesModeActive(active);
+    if (active && !hadesModeActive) {
+      trackAchievementEvent({
+        type: 'hidden_mode.enabled',
+        theme: 'saint-seiya',
+        kind: 'saint-seiya-hades',
         mode: 'enabled',
       });
     }
@@ -532,7 +559,7 @@ function App() {
     <div
       className={`t8-app-shell h-screen flex flex-col overflow-hidden ${
         isPixel ? '' : isDark ? 'bg-zinc-950 text-white' : 'bg-zinc-50 text-zinc-900'
-      } ${isOp ? 't8-app-shell--op' : ''} ${isRh ? 't8-app-shell--rh' : ''} ${isNaruto ? 't8-app-shell--naruto' : ''} ${isEva ? 't8-app-shell--eva' : ''} ${isYyh ? 't8-app-shell--yyh' : ''} ${isSlamdunk ? 't8-app-shell--slamdunk' : ''} ${isSoccer ? 't8-app-shell--soccer' : ''} ${isDragonBall ? 't8-app-shell--dragon-ball' : ''}`}
+      } ${isOp ? 't8-app-shell--op' : ''} ${isRh ? 't8-app-shell--rh' : ''} ${isNaruto ? 't8-app-shell--naruto' : ''} ${isEva ? 't8-app-shell--eva' : ''} ${isYyh ? 't8-app-shell--yyh' : ''} ${isSlamdunk ? 't8-app-shell--slamdunk' : ''} ${isSoccer ? 't8-app-shell--soccer' : ''} ${isDragonBall ? 't8-app-shell--dragon-ball' : ''} ${isSaintSeiya ? 't8-app-shell--saint-seiya' : ''}`}
       style={{ background: 'var(--t8-bg-app)', color: 'var(--t8-text-main)' }}
     >
       {/* 头部状态栏 */}
@@ -667,6 +694,25 @@ function App() {
                 <span />
                 <span />
                 <span />
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+          ) : isSaintSeiya ? (
+            <div className="t8-saint-brand flex items-center gap-2">
+              <span className="t8-saint-brand__mark" aria-hidden="true">
+                {hadesModeActive ? <Crown size={16} /> : <Shield size={16} />}
+              </span>
+              <div className="min-w-0">
+                <h1 className="t8-saint-brand__title text-[14px] font-black leading-none">
+                  {hadesModeActive ? '冥界篇 · 贞贞的无限画布' : '圣斗士 · 十二宫'}
+                </h1>
+                <div className="t8-saint-brand__sub text-[9px] font-bold tracking-wide leading-none mt-0.5">
+                  {hadesModeActive ? 'HADES CHAPTER / ATHENA RESCUED' : 'SANCTUARY CANVAS / COSMO READY'}
+                </div>
+              </div>
+              <span className="t8-saint-brand__zodiac" aria-hidden="true">
                 <span />
                 <span />
                 <span />
@@ -1507,6 +1553,29 @@ function App() {
               >
                 <Sparkles size={12} />
                 神龙
+              </button>
+            </div>
+          )}
+          {isSaintSeiya && hadesUnlockedAt && (
+            <div className="t8-saint-mode-switch" role="group" aria-label="圣斗士主题模式">
+              <button
+                type="button"
+                className={`t8-saint-mode-switch__option ${!hadesModeActive ? 'is-active' : ''}`}
+                aria-pressed={!hadesModeActive}
+                onClick={() => handleSaintSeiyaModeSwitch(false)}
+                title="切回十二宫模式"
+              >
+                十二宫
+              </button>
+              <button
+                type="button"
+                className={`t8-saint-mode-switch__option ${hadesModeActive ? 'is-active' : ''}`}
+                aria-pressed={hadesModeActive}
+                onClick={() => handleSaintSeiyaModeSwitch(true)}
+                title="切换到冥界篇"
+              >
+                <Sparkles size={12} />
+                冥界篇
               </button>
             </div>
           )}

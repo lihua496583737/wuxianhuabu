@@ -18,6 +18,11 @@ export type NodeType =
   | 'rh-tools'
   | 'rh-toolbox'
   | 'rh-toolbox-maker'
+  | 'fal-toolbox'
+  | 'fal-toolbox-maker'
+  | 'model-3d-preview'
+  | 'model-3d-upload'
+  | 'grok-oauth-agent'
   | 'comfyui-store'
   | 'comfyui-app-maker'
   // Special (5)
@@ -68,6 +73,8 @@ export type NodeType =
 export type NodeCategory =
   | 'core'
   | 'rh'
+  | 'fal'
+  | 'grok'
   | 'comfyui'
   | 'special'
   | 'utility'

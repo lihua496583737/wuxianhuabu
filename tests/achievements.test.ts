@@ -15,7 +15,7 @@ function read(rel: string) {
 test('achievement manifest gives every system theme time milestones and featured medals', () => {
   const manifest = JSON.parse(read('../shared/achievementManifest.json'));
   assert.equal(manifest.schema, 't8-achievement-manifest');
-  assert.equal(manifest.themes.length, 10);
+  assert.equal(manifest.themes.length, 11);
   assert.equal(manifest.timeMilestones.length, 5);
   for (const theme of manifest.themes) {
     assert.ok(theme.featured.length >= 3, `${theme.style} should have first-batch featured achievements`);
@@ -26,7 +26,13 @@ test('achievement manifest gives every system theme time milestones and featured
     manifest.films.find((film: any) => film.id === 'film-dragon-ball-01').unlockAchievementId,
     'dragon-ball-shenron-mode',
   );
-  assert.equal(manifest.films.length, 4);
+  const saintSeiya = manifest.themes.find((theme: any) => theme.style === 'saint-seiya');
+  assert.ok(saintSeiya.featured.some((item: any) => item.idSuffix === 'athena-return'));
+  assert.equal(
+    manifest.films.find((film: any) => film.id === 'film-saint-seiya-01').unlockAchievementId,
+    'saint-seiya-athena-return',
+  );
+  assert.equal(manifest.films.length, 5);
   assert.equal(manifest.films.every((film: any) => film.lockedText === '待解锁'), true);
   assert.equal(manifest.films.every((film: any) => film.unavailableText === '影片素材待提供'), true);
 
@@ -61,6 +67,7 @@ test('achievement backend resolves packaged manifest from Electron resources', (
 
   const store = require('../backend/src/achievements/store.js');
   assert.equal(store.normalizeTheme('dragon-ball'), 'dragon-ball');
+  assert.equal(store.normalizeTheme('saint-seiya'), 'saint-seiya');
 
   const source = read('../backend/src/achievements/store.js');
   assert.match(source, /loadAchievementManifest/);
@@ -172,6 +179,55 @@ test('achievement backend records active time, hidden mode, and film placeholder
   }).then((res) => res.json());
   assert.equal(dragonHidden.success, true);
 
+  const saintBronze = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'saint_seiya.cloth_collected', theme: 'saint-seiya', kind: 'bronze' }),
+  }).then((res) => res.json());
+  assert.equal(saintBronze.success, true);
+
+  const saintSilverWin = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'saint_seiya.battle_won', theme: 'saint-seiya', kind: 'silver' }),
+  }).then((res) => res.json());
+  assert.equal(saintSilverWin.success, true);
+
+  const saintGoldCloth = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'saint_seiya.cloth_collected', theme: 'saint-seiya', kind: 'gold' }),
+  }).then((res) => res.json());
+  assert.equal(saintGoldCloth.success, true);
+
+  const saintCosmo = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'saint_seiya.cosmo_burst', theme: 'saint-seiya', kind: 'cosmo' }),
+  }).then((res) => res.json());
+  assert.equal(saintCosmo.success, true);
+
+  const saintGoldComplete = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'saint_seiya.gold_completed', theme: 'saint-seiya', kind: 'twelve-gold' }),
+  }).then((res) => res.json());
+  assert.equal(saintGoldComplete.success, true);
+
+  const saintHidden = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'hidden_mode.enabled', theme: 'saint-seiya', kind: 'saint-seiya-hades', mode: 'enabled' }),
+  }).then((res) => res.json());
+  assert.equal(saintHidden.success, true);
+
+  const saintHadesUsed = await fetch(`${base}/api/achievements/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'hidden_mode.used', theme: 'saint-seiya', kind: 'saint-seiya-hades', mode: 'used' }),
+  }).then((res) => res.json());
+  assert.equal(saintHadesUsed.success, true);
+
   const profile = await fetch(`${base}/api/achievements/profile`).then((res) => res.json());
   assert.equal(profile.success, true);
   assert.equal(profile.data.profile.themeStats.tech.activeSeconds, 600);
@@ -187,10 +243,21 @@ test('achievement backend records active time, hidden mode, and film placeholder
   assert.ok(profile.data.profile.unlockedAchievements['dragon-ball-radar-first']);
   assert.ok(profile.data.profile.unlockedAchievements['dragon-ball-seven-stars']);
   assert.ok(profile.data.profile.unlockedAchievements['dragon-ball-shenron-mode']);
+  assert.equal(profile.data.profile.themeStats['saint-seiya'].saintSeiyaClothsCollected, 2);
+  assert.equal(profile.data.profile.themeStats['saint-seiya'].saintSeiyaGoldClothsCollected, 1);
+  assert.equal(profile.data.profile.themeStats['saint-seiya'].saintSeiyaSilverWins, 1);
+  assert.equal(profile.data.profile.themeStats['saint-seiya'].saintSeiyaCosmoBursts, 1);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-bronze-awakening']);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-silver-trial']);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-gold-gate']);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-twelve-temples']);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-athena-return']);
+  assert.ok(profile.data.profile.unlockedAchievements['saint-seiya-cosmo-burn']);
   assert.equal(profile.data.profile.unlockedFilms['film-rh-01'].hasMedia, false);
   assert.equal(profile.data.profile.unlockedFilms['film-rh-01'].status, 'awaiting-media');
   assert.equal(profile.data.profile.unlockedFilms['film-rh-01'].unavailableText, '影片素材待提供');
   assert.equal(profile.data.profile.unlockedFilms['film-dragon-ball-01'].status, 'awaiting-media');
+  assert.equal(profile.data.profile.unlockedFilms['film-saint-seiya-01'].status, 'awaiting-media');
   assert.ok(profile.data.summary.dailyTasks.length > 0);
   assert.ok(profile.data.summary.weeklyPassport.completedThemeCount >= 3);
   assert.equal(profile.data.summary.creativeReview.topTheme.theme, 'tech');
@@ -306,6 +373,9 @@ test('achievement frontend and server are wired without recording prompt content
   const tracker = read('../src/components/AchievementTracker.tsx');
   const canvas = read('../src/components/Canvas.tsx');
   const dragonRadar = read('../src/components/DragonBallRadar.tsx');
+  const saintSanctuary = read('../src/components/SaintSeiyaSanctuary.tsx');
+  const saintStore = read('../src/stores/saintSeiyaSanctuary.ts');
+  const saintBattle = read('../src/utils/saintSeiyaBattle.ts');
   const nodeActionBar = read('../src/components/NodeActionBar.tsx');
   const materialContext = read('../src/components/MaterialContextMenu.tsx');
   const drawer = read('../src/components/AchievementDrawer.tsx');
@@ -334,10 +404,19 @@ test('achievement frontend and server are wired without recording prompt content
   assert.match(canvas, /rhDuckDecoded[\s\S]*hidden_mode\.used[\s\S]*kind:\s*'rh-duck'[\s\S]*mode:\s*'used'/);
   assert.match(canvas, /yyhPortraitHidden[\s\S]*hidden_mode\.used[\s\S]*kind:\s*'yyh-portrait'[\s\S]*mode:\s*'used'/);
   assert.match(canvas, /DragonBallRadar/);
+  assert.match(canvas, /SaintSeiyaSanctuary/);
   assert.match(dragonRadar, /dragon_ball\.collected/);
   assert.match(dragonRadar, /dragon_ball\.set_completed/);
   assert.match(dragonRadar, /kind:\s*'dragon-ball-shenron'/);
   assert.match(dragonRadar, /playDragonBallCollectSound/);
+  assert.match(saintSanctuary, /saint_seiya\.cloth_collected/);
+  assert.match(saintSanctuary, /saint_seiya\.gold_completed/);
+  assert.match(saintSanctuary, /kind:\s*'saint-seiya-hades'/);
+  assert.match(saintStore, /SAINT_SEIYA_SPAWN_INTERVAL_MS\s*=\s*60_000/);
+  assert.match(saintStore, /SAINT_SEIYA_CHEST_VISIBLE_MS\s*=\s*10_000/);
+  assert.match(saintStore, /SAINT_SEIYA_OPEN_MS\s*=\s*3_000/);
+  assert.match(saintBattle, /rewardExpForRank/);
+  assert.match(saintBattle, /hasAllGoldCloths/);
   assert.match(materialContext, /type:\s*'resource\.saved'/);
   assert.match(drawer, /今日创作任务/);
   assert.match(drawer, /周常创作护照/);
@@ -361,7 +440,9 @@ test('achievement frontend and server are wired without recording prompt content
   assert.match(toast, /openDrawer\(item\.filmTitle \? 'films' : 'themes', item\.themeId\)/);
   assert.match(ceremony, /t8-hidden-ceremony/);
   assert.match(ceremony, /SHENRON MODE/);
+  assert.match(ceremony, /HADES CHAPTER/);
   assert.match(achievementStore, /buildHiddenCeremony/);
+  assert.match(achievementStore, /saint-seiya-hades/);
   assert.match(achievementStore, /ceremonies/);
   assert.match(api, /AchievementWeeklyPassport/);
   assert.match(api, /AchievementCreativeReview/);

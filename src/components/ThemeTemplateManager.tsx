@@ -93,6 +93,7 @@ const VISUAL_STYLE_OPTIONS = [
   { value: 'slamdunk', label: '灌篮高手' },
   { value: 'soccer-hero', label: '足球小将' },
   { value: 'dragon-ball', label: '七龙珠' },
+  { value: 'saint-seiya', label: '圣斗士' },
 ] as const;
 
 const VISUAL_INTENSITY_OPTIONS = [
@@ -113,6 +114,8 @@ const MUSIC_PRESET_OPTIONS: Array<{ value: ThemeMusicPreset; label: string }> = 
   { value: 'golden-goal', label: '黄金进球' },
   { value: 'ki-burst', label: '气功波雷达' },
   { value: 'shenron-aura', label: '神龙青焰' },
+  { value: 'pegasus-cosmos', label: '天马小宇宙' },
+  { value: 'hades-eclipse', label: '冥界日蚀' },
 ];
 
 const MAX_THEME_AUDIO_SIZE = 20 * 1024 * 1024;
@@ -215,6 +218,17 @@ function visualDefaultsFor(style: ThemeVisuals['style'], legacyStyle: LegacyThem
       canvasPattern: 'dragon-radar',
       nodeFrame: 'capsule-card',
       headerMark: prev?.headerMark || 'DRAGON RADAR',
+    };
+  }
+  if (style === 'saint-seiya') {
+    return {
+      ...fallbackVisuals(legacyStyle),
+      ...(prev || {}),
+      style,
+      iconPack: 'saint-seiya',
+      canvasPattern: 'sanctuary-zodiac',
+      nodeFrame: 'cloth-box-card',
+      headerMark: prev?.headerMark || 'SANCTUARY',
     };
   }
   if (style === 'tech') {
@@ -329,6 +343,18 @@ function fallbackMusic(legacyStyle: LegacyThemeStyle, visuals?: ThemeVisuals): T
       volume: 0.18,
       bpm: 156,
       copyrightNote: '七龙珠第一部开场曲默认音乐文件；神龙隐藏模式会切换到 CHA-LA HEAD-CHA-LA，可在主题模板中上传替换。公开分发前请确认音乐授权边界。',
+    };
+  }
+  if (visualStyle === 'saint-seiya') {
+    return {
+      title: 'Pegasus Cosmos Loop',
+      preset: 'pegasus-cosmos',
+      source: 'synth',
+      hiddenTitle: 'Hades Eclipse',
+      hiddenVolume: 0.18,
+      volume: 0.16,
+      bpm: 148,
+      copyrightNote: '原创圣域小宇宙合成循环；冥界篇使用隐藏合成 preset。可替换为已授权音频 URL。',
     };
   }
   if (legacyStyle === 'tech' || visualStyle === 'tech') {

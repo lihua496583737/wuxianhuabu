@@ -45,6 +45,10 @@ const EVENT_TYPES = new Set([
   'parsehub.resolved',
   'dragon_ball.collected',
   'dragon_ball.set_completed',
+  'saint_seiya.cloth_collected',
+  'saint_seiya.gold_completed',
+  'saint_seiya.battle_won',
+  'saint_seiya.cosmo_burst',
 ]);
 const CREATIVE_EVENT_TYPES = new Set([
   'hidden_mode.enabled',
@@ -57,6 +61,10 @@ const CREATIVE_EVENT_TYPES = new Set([
   'parsehub.resolved',
   'dragon_ball.collected',
   'dragon_ball.set_completed',
+  'saint_seiya.cloth_collected',
+  'saint_seiya.gold_completed',
+  'saint_seiya.battle_won',
+  'saint_seiya.cosmo_burst',
 ]);
 
 function nowIso(ts = Date.now()) {
@@ -135,6 +143,15 @@ function emptyThemeStats() {
     parseHubResolved: 0,
     dragonBallsCollected: 0,
     dragonBallSetsCompleted: 0,
+    saintSeiyaClothsCollected: 0,
+    saintSeiyaBronzeClothsCollected: 0,
+    saintSeiyaSilverClothsCollected: 0,
+    saintSeiyaGoldClothsCollected: 0,
+    saintSeiyaGoldCompleted: 0,
+    saintSeiyaBattlesWon: 0,
+    saintSeiyaSilverWins: 0,
+    saintSeiyaGoldWins: 0,
+    saintSeiyaCosmoBursts: 0,
     nodeTypeCounts: {},
     nodeRunCounts: {},
     hiddenModes: {},
@@ -548,6 +565,27 @@ function applyEventToStats(data, event) {
   }
   if (event.type === 'dragon_ball.set_completed') {
     stats.dragonBallSetsCompleted += 1;
+    return;
+  }
+  if (event.type === 'saint_seiya.cloth_collected') {
+    stats.saintSeiyaClothsCollected += 1;
+    if (event.kind === 'bronze') stats.saintSeiyaBronzeClothsCollected += 1;
+    if (event.kind === 'silver') stats.saintSeiyaSilverClothsCollected += 1;
+    if (event.kind === 'gold') stats.saintSeiyaGoldClothsCollected += 1;
+    return;
+  }
+  if (event.type === 'saint_seiya.gold_completed') {
+    stats.saintSeiyaGoldCompleted += 1;
+    return;
+  }
+  if (event.type === 'saint_seiya.battle_won') {
+    stats.saintSeiyaBattlesWon += 1;
+    if (event.kind === 'silver') stats.saintSeiyaSilverWins += 1;
+    if (event.kind === 'gold') stats.saintSeiyaGoldWins += 1;
+    return;
+  }
+  if (event.type === 'saint_seiya.cosmo_burst') {
+    stats.saintSeiyaCosmoBursts += 1;
   }
 }
 

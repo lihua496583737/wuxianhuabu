@@ -30,6 +30,7 @@ import { trackAchievementEvent, useAchievementStore } from '../stores/achievemen
 import { getTemplateMode, resolveThemeTemplate } from '../theme/defaultTemplates';
 import { useRunBusStore } from '../stores/runBus';
 import { useGroupBusStore, GROUP_COLORS, DEFAULT_GROUP_NAME } from '../stores/groupBus';
+import { useRadialMenuStore } from '../stores/radialMenu';
 import { topologicalSort } from '../utils/topologicalSort';
 import { installGlobalWheelBlockObserver } from '../utils/wheelBlock';
 // v1.2.10.5: 节点落点防重叠解析器 (单节点/整组双模式 + 兜底+toast+飞镜)
@@ -81,6 +82,15 @@ import { resolveConnectionByNodeSerialId } from '../utils/connectByNodeSerialId'
 import { formatShortcutList, matchesAnyShortcut } from '../utils/keyboardShortcuts';
 import { applyNodeAlignment, type NodeAlignAction } from '../utils/nodeAlign';
 import {
+  RADIAL_MENU_MOVE_TOLERANCE,
+  clampRadialMenuCenter,
+  distanceBetween,
+  normalizeRadialMenuSlots,
+  radialSlotIndexFromPointer,
+  visibleRadialMenuNodeOptions,
+  type RadialMenuPoint,
+} from '../utils/radialMenu';
+import {
   collectMaterialSetBucketsFromData,
   isMaterialSetKind,
   materialSetItemsToData,
@@ -95,9 +105,12 @@ import { logBus } from '../stores/logs';
 import CanvasToolbar from './CanvasToolbar';
 import TerminalPanel from './TerminalPanel';
 import NodeActionBar from './NodeActionBar';
+import RadialNodeMenu from './RadialNodeMenu';
+import RadialMenuSettingsModal from './RadialMenuSettingsModal';
 import MaterialDragOverlay from './MaterialDragOverlay';
 import ThemeMusicToggle from './ThemeMusicToggle';
 import DragonBallRadar from './DragonBallRadar';
+import SaintSeiyaSanctuary from './SaintSeiyaSanctuary';
 import SendMaterialsModal from './SendMaterialsModal';
 import SmartImage from './SmartImage';
 import { useCanvasHistory } from '../hooks/useCanvasHistory';
@@ -138,6 +151,9 @@ const RunningHubNode = lazyCanvasNode(() => import('./nodes/RunningHubNode'), 'R
 const RhConfigNode = lazyCanvasNode(() => import('./nodes/RhConfigNode'), 'RhConfigNode');
 const RHToolsNode = lazyCanvasNode(() => import('./nodes/RHToolsNode'), 'RHToolsNode');
 const RHToolboxNode = lazyCanvasNode(() => import('./nodes/RHToolboxNode'), 'RHToolboxNode');
+const FalToolboxNode = lazyCanvasNode(() => import('./nodes/FalToolboxNode'), 'FalToolboxNode');
+const Model3DPreviewNode = lazyCanvasNode(() => import('./nodes/Model3DPreviewNode'), 'Model3DPreviewNode');
+const GrokOAuthAgentNode = lazyCanvasNode(() => import('./nodes/GrokOAuthAgentNode'), 'GrokOAuthAgentNode');
 const ComfyUIStoreNode = lazyCanvasNode(() => import('./nodes/ComfyUIStoreNode'), 'ComfyUIStoreNode');
 const ComfyUIAppMakerNode = lazyCanvasNode(() => import('./nodes/ComfyUIAppMakerNode'), 'ComfyUIAppMakerNode');
 const ResizeNode = lazyCanvasNode(() => import('./nodes/ResizeNode'), 'ResizeNode');
@@ -173,8 +189,13 @@ const MaterialSetNode = lazyCanvasNode(() => import('./nodes/MaterialSetNode'), 
 const UploadNode = lazyCanvasNode(() => import('./nodes/UploadNode'), 'UploadNode');
 const OutputNode = lazyCanvasNode(() => import('./nodes/OutputNode'), 'OutputNode');
 const GroupBoxNode = lazyCanvasNode(() => import('./nodes/GroupBoxNode'), 'GroupBoxNode');
+const RH_TOOLBOX_MAKER_MODULE = './nodes/RHToolboxMakerNode';
+const FAL_TOOLBOX_MAKER_MODULE = './nodes/FalToolboxMakerNode';
 const RHToolboxMakerNode = import.meta.env?.DEV
-  ? lazyCanvasNode(() => import('./nodes/RHToolboxMakerNode'), 'RHToolboxMakerNode')
+  ? lazyCanvasNode(() => import(/* @vite-ignore */ RH_TOOLBOX_MAKER_MODULE), 'RHToolboxMakerNode')
+  : PlaceholderNode;
+const FalToolboxMakerNode = import.meta.env?.DEV
+  ? lazyCanvasNode(() => import(/* @vite-ignore */ FAL_TOOLBOX_MAKER_MODULE), 'FalToolboxMakerNode')
   : PlaceholderNode;
 
 // Phase 4 阶段:全部 24 个节点均已实现业务逻辑
@@ -194,6 +215,11 @@ const SPECIFIC_NODES: Record<string, any> = {
   'rh-tools': RHToolsNode,
   'rh-toolbox': RHToolboxNode,
   ...(import.meta.env?.DEV ? { 'rh-toolbox-maker': RHToolboxMakerNode } : {}),
+  'fal-toolbox': FalToolboxNode,
+  'model-3d-preview': Model3DPreviewNode,
+  'model-3d-upload': UploadNode,
+  'grok-oauth-agent': GrokOAuthAgentNode,
+  ...(import.meta.env?.DEV ? { 'fal-toolbox-maker': FalToolboxMakerNode } : {}),
   'comfyui-store': ComfyUIStoreNode,
   'comfyui-app-maker': ComfyUIAppMakerNode,
   // Special (5)
@@ -235,7 +261,7 @@ const SPECIFIC_NODES: Record<string, any> = {
   'topaz-image-upscale': TopazImageUpscaleNode,
   'topaz-video-upscale': TopazVideoUpscaleNode,
   'panorama-3d': Panorama3DNode,
-  // Input (1) - 上传素材
+  // Input - 上传素材
   upload: UploadNode,
   // Output (1) - 输出素材(文本/图像/视频/音频 预览 + 文本双击编辑)
   output: OutputNode,
@@ -495,6 +521,7 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     history: [],
   },
   upload: { uploadType: null },
+  'model-3d-upload': { uploadType: 'model3d', lockedUploadType: 'model3d' },
   'material-set': { materialSetKind: null, materialSetItems: [] },
   // RH 工具节点（v1.2.10.1+）：启动器状态字段 + 运行状态字段（与 RunningHubNode 对齐）
   // 启动器：rhToolsActiveCategoryId / rhToolsActiveAppId / rhToolsSearchQuery
@@ -536,6 +563,44 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
     audioUrls: [],
     outputText: '',
     error: '',
+  },
+  'fal-toolbox': {
+    falToolboxCategoryId: 'all',
+    falToolboxActiveToolId: '',
+    falToolboxSearchQuery: '',
+    falToolboxUserParams: {},
+    materialOrder: [],
+    excludedMaterialIds: [],
+    status: 'idle',
+    requestId: '',
+    responseUrl: '',
+    statusUrl: '',
+    urls: [],
+    imageUrl: '',
+    imageUrls: [],
+    videoUrl: '',
+    videoUrls: [],
+    audioUrl: '',
+    audioUrls: [],
+    modelUrls: [],
+    modelUrl: '',
+    directModelUrl: '',
+    directModelUrls: [],
+    outputText: '',
+    error: '',
+  },
+  'model-3d-preview': {
+    modelUrl: '',
+    modelUrls: [],
+    modelPreviewIndex: 0,
+    modelPreviewAutoRotate: true,
+    imageUrl: '',
+    imageUrls: [],
+    urls: [],
+    outputText: '',
+    status: 'idle',
+    error: '',
+    size: { w: 520, h: 440 },
   },
   'comfyui-store': {
     comfyuiStoreProviderId: '',
@@ -599,6 +664,21 @@ const INITIAL_DATA: Record<string, Record<string, any>> = {
       ],
       rhToolboxMakerUserParams: [],
       rhToolboxMakerFixedParams: [],
+      text: '',
+      outputText: '',
+    },
+    'fal-toolbox-maker': {
+      falToolboxMakerUrl: 'https://fal.ai/models/xai/grok-imagine-image/quality/edit/api',
+      falToolboxMakerEndpoint: 'xai/grok-imagine-image/quality/edit',
+      falToolboxMakerTitle: 'Grok Imagine Image Edit',
+      falToolboxMakerId: 'grok-imagine-image-edit',
+      falToolboxMakerCategoryId: 'image-edit',
+      falToolboxMakerDescription: '从 fal.ai API 文档生成的 Fal 超市草稿',
+      falToolboxMakerCapabilities: 'image.edit\nimage.generate',
+      falToolboxMakerOutputKind: 'image',
+      falToolboxMakerHasImageInput: true,
+      falToolboxMakerImageMultiple: false,
+      falToolboxMakerImageBase64: true,
       text: '',
       outputText: '',
     },
@@ -716,7 +796,7 @@ const EXECUTABLE_NODE_TYPES = new Set<string>([
   'multi-angle-3d', 'panorama-720', 'penguin-portrait',
   'video', 'seedance', 'audio', 'llm', 'runninghub', 'runninghub-wallet',
   // v1.2.10.1: rh-tools 与 RunningHub 同质，同样可被批量运行调起
-  'rh-tools', 'rh-toolbox', 'comfyui-store',
+  'rh-tools', 'rh-toolbox', 'fal-toolbox', 'comfyui-store',
   'resize', 'upscale', 'grid-crop', 'grid-editor', 'remove-bg', 'combine', 'image-compare', 'drawing-board',
   'panorama-3d',
   'frame-extractor', 'frame-pair',
@@ -740,7 +820,9 @@ interface SendNodeSpec {
   data: Record<string, any>;
 }
 
-function mediaItemsFromSendables(items: SendableMaterial[], kind: MediaKind): MediaItem[] {
+type BasicMediaKind = Exclude<MediaKind, 'model3d'>;
+
+function mediaItemsFromSendables(items: SendableMaterial[], kind: BasicMediaKind): MediaItem[] {
   return items
     .map(sendableToMediaItem)
     .filter((item): item is MediaItem => !!item && item.kind === kind);
@@ -787,7 +869,7 @@ function buildSendNodeSpecs(materials: SendableMaterial[], mode: SendTargetMode)
   const buckets = bucketSendableMaterials(materials);
   const specs: SendNodeSpec[] = [];
   const textValues = buckets.text.map((item) => (item.text || '').trim()).filter(Boolean);
-  const mediaKinds: MediaKind[] = ['image', 'video', 'audio'];
+  const mediaKinds: BasicMediaKind[] = ['image', 'video', 'audio'];
 
   if (mode === 'portrait-master') {
     const seen = new Set<string>();
@@ -1088,6 +1170,28 @@ export interface AddNodeOptions {
 
 export type AddNodeFn = (type: NodeType, options?: AddNodeOptions) => void;
 
+interface RadialMenuSession {
+  anchor: RadialMenuPoint;
+  center: RadialMenuPoint;
+  cursor: RadialMenuPoint;
+  activeIndex: number | null;
+}
+
+interface RadialPressState {
+  pointerId: number;
+  start: RadialMenuPoint;
+  timer: number;
+  open: boolean;
+}
+
+interface FileDragOutFeedback {
+  x: number;
+  y: number;
+  tone: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail: string;
+}
+
 export interface InsertWorkflowOptions {
   atScreen?: { x: number; y: number };
   title?: string;
@@ -1099,8 +1203,10 @@ const MEDIA_EXTENSIONS: Record<MediaKind, string[]> = {
   image: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
   video: ['mp4', 'webm', 'mov', 'm4v', 'mkv'],
   audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'],
+  model3d: ['glb', 'gltf', 'obj', 'fbx', 'stl', 'usdz', 'zip'],
 };
 
+const FILE_DRAG_OUT_MOVE_TOLERANCE = 4;
 const INTERNAL_NODE_PASTE_DELAY_MS = 120;
 const EXTERNAL_MEDIA_PASTE_DEDUPE_MS = 900;
 
@@ -1114,12 +1220,13 @@ function inferCanvasMediaKind(file: File): MediaKind | null {
   if (MEDIA_EXTENSIONS.image.includes(ext)) return 'image';
   if (MEDIA_EXTENSIONS.video.includes(ext)) return 'video';
   if (MEDIA_EXTENSIONS.audio.includes(ext)) return 'audio';
+  if (MEDIA_EXTENSIONS.model3d.includes(ext)) return 'model3d';
   return null;
 }
 
 function fallbackMediaName(file: File, kind: MediaKind, index: number): string {
   if (file.name) return file.name;
-  const ext = kind === 'image' ? 'png' : kind === 'video' ? 'mp4' : 'wav';
+  const ext = kind === 'image' ? 'png' : kind === 'video' ? 'mp4' : kind === 'audio' ? 'wav' : 'glb';
   return `canvas-${kind}-${Date.now()}-${index + 1}.${ext}`;
 }
 
@@ -1220,9 +1327,30 @@ function absoluteMaterialUrl(url: string) {
   }
 }
 
+function canUseNativeDragOut(url: string) {
+  const clean = String(url || '').trim();
+  if (!clean) return false;
+  if (/^file:\/\//i.test(clean)) return true;
+  const prefixes = ['/files/input/', '/input/', '/files/output/', '/output/', '/files/thumbnails/', '/thumbnails/'];
+  if (prefixes.some((prefix) => clean.startsWith(prefix))) return true;
+  try {
+    const parsed = new URL(clean, absoluteMaterialUrl('/'));
+    const host = parsed.hostname.toLowerCase();
+    const isLocalHost = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+    return isLocalHost && prefixes.some((prefix) => parsed.pathname.startsWith(prefix));
+  } catch {
+    return false;
+  }
+}
+
+function isLeftRightMouseChord(buttons: number | undefined | null) {
+  const mask = Number(buttons || 0);
+  return (mask & 1) !== 0 && (mask & 2) !== 0;
+}
+
 function placementShelfItemFromNode(node: Node, source: PlacementShelfSource): PlacementShelfItem | null {
   const data = (node.data || {}) as any;
-  for (const kind of ['image', 'video', 'audio'] as MediaKind[]) {
+  for (const kind of ['image', 'video', 'audio', 'model3d'] as MediaKind[]) {
     const first = getMediaItemsFromData(data, kind)[0];
     if (!first?.url) continue;
     return {
@@ -1256,7 +1384,7 @@ function findUploadNodeIdFromTarget(target: EventTarget | Element | null | undef
 }
 
 function chooseUploadReplacementKind(existingKind: any, buckets: Record<MediaKind, File[]>, firstKind: MediaKind | null): MediaKind | null {
-  const current = (['image', 'video', 'audio'] as MediaKind[]).includes(existingKind) ? existingKind as MediaKind : null;
+  const current = (['image', 'video', 'audio', 'model3d'] as MediaKind[]).includes(existingKind) ? existingKind as MediaKind : null;
   if (current && buckets[current].length > 0) return current;
   return firstKind;
 }
@@ -1284,6 +1412,33 @@ function isCanvasOverviewShortcutBlocked(target: EventTarget | null): boolean {
       '.t8-sidebar',
     ].join(','),
   );
+}
+
+function isRadialMenuPaneTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  const el = target as HTMLElement;
+  if (isTextEditingTarget(el)) return false;
+  if (
+    el.closest(
+      [
+        '.react-flow__node',
+        '.react-flow__handle',
+        '.react-flow__edge',
+        '.react-flow__controls',
+        '.react-flow__minimap',
+        '[data-canvas-floating-ui]',
+        '[data-drag-source]',
+        'button',
+        'a',
+        '[role="button"]',
+        '.t8-canvas-toolbar',
+        '.t8-sidebar',
+      ].join(','),
+    )
+  ) {
+    return false;
+  }
+  return !!el.closest('.react-flow__pane, .react-flow__background, .react-flow__renderer');
 }
 
 const MODEL_USAGE_HELP_TEXT = `特别注意事项：
@@ -1440,7 +1595,13 @@ function PlacementShelf({
             </div>
           )}
           {visible.map((item) => {
-            const Icon = item.kind === 'image' ? LucideIcons.Image : item.kind === 'video' ? LucideIcons.Video : LucideIcons.Music;
+            const Icon = item.kind === 'image'
+              ? LucideIcons.Image
+              : item.kind === 'video'
+                ? LucideIcons.Video
+                : item.kind === 'model3d'
+                  ? LucideIcons.Box
+                  : LucideIcons.Music;
             return (
               <div
                 key={item.id}
@@ -1525,8 +1686,25 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const isDragonBall = visualStyle === 'dragon-ball';
   const themeTokens = getTemplateMode(currentTemplate, theme).tokens;
   const { screenToFlowPosition, setCenter, getViewport, setViewport, fitView } = useReactFlow();
+  const radialSlotsRaw = useRadialMenuStore((s) => s.slots);
+  const radialLongPressMs = useRadialMenuStore((s) => s.longPressMs);
+  const radialSlots = useMemo(
+    () => normalizeRadialMenuSlots(NODE_REGISTRY, radialSlotsRaw),
+    [radialSlotsRaw],
+  );
+  const radialNodeOptions = useMemo(() => visibleRadialMenuNodeOptions(NODE_REGISTRY), []);
+  const radialNodesByType = useMemo(
+    () => new Map(radialNodeOptions.map((node) => [node.type, node])),
+    [radialNodeOptions],
+  );
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [radialMenu, setRadialMenu] = useState<RadialMenuSession | null>(null);
+  const [fileDragOutActive, setFileDragOutActive] = useState(false);
+  const [fileDragOutFeedback, setFileDragOutFeedback] = useState<FileDragOutFeedback | null>(null);
+  const radialPanLocked = Boolean(radialMenu);
+  const canvasPanLocked = radialPanLocked || fileDragOutActive;
+  const memoPanOnDrag = useMemo(() => (canvasPanLocked ? false : [0]), [canvasPanLocked]);
   const [placementShelfItems, setPlacementShelfItems] = useState<PlacementShelfItem[]>([]);
   const [placementShelfOpen, setPlacementShelfOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1536,6 +1714,10 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const lastSavedByCanvasRef = useRef<Map<string, string>>(new Map());
   const lastSavedNodeCountByCanvasRef = useRef<Map<string, number>>(new Map());
   const nextNodeSerialIdRef = useRef(1);
+  const radialMenuRef = useRef<RadialMenuSession | null>(null);
+  const radialPressRef = useRef<RadialPressState | null>(null);
+  const radialViewportLockRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  const fileDragOutFeedbackTimerRef = useRef<number | null>(null);
   const allowEmptySaveCanvasIdsRef = useRef<Set<string>>(new Set());
   const edgeMotionReleaseTimerRef = useRef<number | null>(null);
   const [viewportMoving, setViewportMoving] = useState(false);
@@ -1574,6 +1756,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   const connectionPanPointerRef = useRef<{ x: number; y: number } | null>(null);
   const [connectionPanModeActive, setConnectionPanModeActive] = useState(false);
   const [modelHelpOpen, setModelHelpOpen] = useState(false);
+  const [radialSettingsOpen, setRadialSettingsOpen] = useState(false);
   const altDragCloneRef = useRef<{
     placeholderIds: Map<string, string>; // origId -> placeholderId
   } | null>(null);
@@ -1607,14 +1790,35 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     }, EDGE_MOTION_RELEASE_DELAY_MS);
   }, [clearEdgeMotionReleaseTimer]);
 
+  const restoreRadialViewportLock = useCallback(() => {
+    const locked = radialViewportLockRef.current;
+    if (!locked) return;
+    const current = getViewport();
+    if (
+      Math.abs(current.x - locked.x) > 0.01 ||
+      Math.abs(current.y - locked.y) > 0.01 ||
+      Math.abs(current.zoom - locked.zoom) > 0.0001
+    ) {
+      void setViewport(locked);
+    }
+  }, [getViewport, setViewport]);
+
   const handleViewportMoveStart = useCallback(() => {
+    if (radialViewportLockRef.current) {
+      restoreRadialViewportLock();
+      return;
+    }
     clearEdgeMotionReleaseTimer();
     setViewportMoving(true);
-  }, [clearEdgeMotionReleaseTimer]);
+  }, [clearEdgeMotionReleaseTimer, restoreRadialViewportLock]);
 
   const handleViewportMoveEnd = useCallback(() => {
+    if (radialViewportLockRef.current) {
+      restoreRadialViewportLock();
+      return;
+    }
     releaseEdgeMotionSoon(setViewportMoving);
-  }, [releaseEdgeMotionSoon]);
+  }, [releaseEdgeMotionSoon, restoreRadialViewportLock]);
 
   // ===== SHIFT+拖拽 Handle 批量移线 =====
   // 按住 SHIFT 从节点入口(target handle)拖出，可一次性把所有入边移到另一个节点的入口。
@@ -1634,6 +1838,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+  useEffect(() => {
+    radialMenuRef.current = radialMenu;
+  }, [radialMenu]);
 
   useEffect(() => {
     if (!loaded || !achievementProfileLoaded || !achievementTrackingEnabled) return;
@@ -2062,6 +2269,170 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     [screenToFlowPosition, nodes, getViewport, setCenter, assignActiveNodeSerials, visualStyle]
   );
 
+  useEffect(() => {
+    const stopRadialPointerEvent = (event: PointerEvent | MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+
+    const clearPress = () => {
+      const press = radialPressRef.current;
+      if (press?.timer) window.clearTimeout(press.timer);
+      radialPressRef.current = null;
+      if (!radialMenuRef.current) {
+        radialViewportLockRef.current = null;
+      }
+    };
+
+    const closeRadial = () => {
+      clearPress();
+      restoreRadialViewportLock();
+      radialViewportLockRef.current = null;
+      radialMenuRef.current = null;
+      setRadialMenu(null);
+    };
+
+    const openRadialFromPress = (press: RadialPressState) => {
+      const center = clampRadialMenuCenter(press.start, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      press.open = true;
+      if (!radialViewportLockRef.current) {
+        radialViewportLockRef.current = getViewport();
+      }
+      setPaneMenu(null);
+      setContextMenu(null);
+      setSelectionContextSubmenu(null);
+      const next = {
+        anchor: press.start,
+        center,
+        cursor: press.start,
+        activeIndex: null,
+      };
+      radialMenuRef.current = next;
+      setRadialMenu(next);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.defaultPrevented || event.button !== 1) return;
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+      if (!isRadialMenuPaneTarget(event.target)) return;
+      stopRadialPointerEvent(event);
+      clearPress();
+      radialViewportLockRef.current = getViewport();
+      const start = { x: event.clientX, y: event.clientY };
+      const press: RadialPressState = {
+        pointerId: event.pointerId,
+        start,
+        open: false,
+        timer: window.setTimeout(() => {
+          if (radialPressRef.current === press) openRadialFromPress(press);
+        }, radialLongPressMs),
+      };
+      radialPressRef.current = press;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const press = radialPressRef.current;
+      if (!press || press.pointerId !== event.pointerId) return;
+      stopRadialPointerEvent(event);
+      restoreRadialViewportLock();
+      const point = { x: event.clientX, y: event.clientY };
+      if (!press.open) {
+        if (distanceBetween(press.start, point) > RADIAL_MENU_MOVE_TOLERANCE) clearPress();
+        return;
+      }
+      const current = radialMenuRef.current;
+      if (!current) return;
+      const index = radialSlotIndexFromPointer(current.center, point);
+      const activeIndex = index !== null && radialSlots[index]?.enabled ? index : null;
+      const next = { ...current, cursor: point, activeIndex };
+      radialMenuRef.current = next;
+      setRadialMenu(next);
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      const press = radialPressRef.current;
+      if (!press || press.pointerId !== event.pointerId) return;
+      stopRadialPointerEvent(event);
+      if (!press.open) {
+        clearPress();
+        return;
+      }
+      const current = radialMenuRef.current;
+      const slot = current?.activeIndex === null || current?.activeIndex === undefined
+        ? null
+        : radialSlots[current.activeIndex];
+      closeRadial();
+      if (slot?.enabled) {
+        addNode(slot.nodeType, { atScreen: current?.anchor || press.start });
+      }
+    };
+
+    const onPointerCancel = (event: PointerEvent) => {
+      const press = radialPressRef.current;
+      if (!press || press.pointerId !== event.pointerId) return;
+      stopRadialPointerEvent(event);
+      closeRadial();
+    };
+
+    const onAuxClick = (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      if (!isRadialMenuPaneTarget(event.target) && !radialMenuRef.current) return;
+      stopRadialPointerEvent(event);
+    };
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      if (!isRadialMenuPaneTarget(event.target) && !radialMenuRef.current && !radialPressRef.current) return;
+      stopRadialPointerEvent(event);
+    };
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (!radialMenuRef.current && !radialPressRef.current) return;
+      stopRadialPointerEvent(event);
+    };
+
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      if (!radialMenuRef.current && !radialPressRef.current) return;
+      stopRadialPointerEvent(event);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && radialMenuRef.current) {
+        event.preventDefault();
+        closeRadial();
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerCancel, true);
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mousemove', onMouseMove, true);
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('auxclick', onAuxClick, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('blur', closeRadial);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerCancel, true);
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mousemove', onMouseMove, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('auxclick', onAuxClick, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('blur', closeRadial);
+      closeRadial();
+    };
+  }, [addNode, getViewport, radialLongPressMs, radialSlots, restoreRadialViewportLock]);
+
   const createUploadNodesFromFiles = useCallback(
     async (rawFiles: File[], atScreen?: { x: number; y: number }) => {
       const seenFiles = new Set<string>();
@@ -2073,7 +2444,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         seenFiles.add(key);
         return true;
       });
-      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [] };
+      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [], model3d: [] };
       let skipped = 0;
       dedupedFiles.forEach((file) => {
         const kind = inferCanvasMediaKind(file);
@@ -2084,7 +2455,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         buckets[kind].push(file);
       });
 
-      const kinds = (['image', 'video', 'audio'] as MediaKind[]).filter((kind) => buckets[kind].length > 0);
+      const kinds = (['image', 'video', 'audio', 'model3d'] as MediaKind[]).filter((kind) => buckets[kind].length > 0);
       if (kinds.length === 0) return false;
 
       const payloads: Array<{ kind: MediaKind; items: MediaItem[] }> = [];
@@ -2116,26 +2487,32 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
           : { x: window.innerWidth / 2, y: window.innerHeight / 2 });
       const base = screenToFlowPosition(screenPoint);
-      const size = defaultSizeOf('upload');
-      const desired = payloads.map((_, index) => ({
-        x: base.x - size.w / 2 + (index % 3) * 300,
-        y: base.y - size.h / 2 + Math.floor(index / 3) * 300,
-        w: size.w,
-        h: size.h,
-      }));
+      const desired = payloads.map((payload, index) => {
+        const nodeType = payload.kind === 'model3d' ? 'model-3d-upload' : 'upload';
+        const size = defaultSizeOf(nodeType);
+        return {
+          x: base.x - size.w / 2 + (index % 3) * 300,
+          y: base.y - size.h / 2 + Math.floor(index / 3) * 300,
+          w: size.w,
+          h: size.h,
+        };
+      });
       const offset = placeBatchNodes(desired, nodesRef.current, {
         source: 'placement:canvas-media-upload',
       });
       const stamp = Date.now();
       const newNodes = payloads.map((payload, index) => ({
         id: `upload-canvas-${payload.kind}-${stamp}-${index}-${Math.random().toString(36).slice(2, 6)}`,
-        type: 'upload',
+        type: payload.kind === 'model3d' ? 'model-3d-upload' : 'upload',
         position: {
           x: desired[index].x + offset.dx,
           y: desired[index].y + offset.dy,
         },
         selected: true,
-        data: createUploadDataFromItems(payload.kind, payload.items),
+        data: {
+          ...createUploadDataFromItems(payload.kind, payload.items),
+          ...(payload.kind === 'model3d' ? { lockedUploadType: 'model3d' } : {}),
+        },
       })) as Node[];
 
       const assignedNewNodes = assignActiveNodeSerials(newNodes, nodesRef.current);
@@ -2157,11 +2534,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
 
   const replaceUploadNodeFromFiles = useCallback(
     async (nodeId: string, rawFiles: File[]) => {
-      const target = nodesRef.current.find((node) => node.id === nodeId && node.type === 'upload');
+      const target = nodesRef.current.find((node) => node.id === nodeId && (node.type === 'upload' || node.type === 'model-3d-upload'));
       if (!target) return false;
 
       const seenFiles = new Set<string>();
-      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [] };
+      const buckets: Record<MediaKind, File[]> = { image: [], video: [], audio: [], model3d: [] };
       let firstKind: MediaKind | null = null;
       let skipped = 0;
       rawFiles.forEach((file) => {
@@ -2177,11 +2554,12 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         buckets[kind].push(file);
       });
 
-      const kind = chooseUploadReplacementKind((target.data as any)?.uploadType, buckets, firstKind);
+      const existingKind = target.type === 'model-3d-upload' ? 'model3d' : (target.data as any)?.uploadType;
+      const kind = chooseUploadReplacementKind(existingKind, buckets, firstKind);
       if (!kind) return false;
       const accepted = buckets[kind];
       if (accepted.length === 0) return false;
-      const supportedCount = buckets.image.length + buckets.video.length + buckets.audio.length;
+      const supportedCount = buckets.image.length + buckets.video.length + buckets.audio.length + buckets.model3d.length;
       const skippedDifferentKind = Math.max(0, supportedCount - accepted.length);
 
       const items: MediaItem[] = [];
@@ -2215,9 +2593,12 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         })
       );
       const notices: string[] = [];
-      if (skippedDifferentKind > 0 || skipped > 0) notices.push(`跳过 ${skippedDifferentKind + skipped} 个非${kind === 'image' ? '图像' : kind === 'video' ? '视频' : '音频'}素材`);
+      const kindLabel = kind === 'image' ? '图像' : kind === 'video' ? '视频' : kind === 'audio' ? '音频' : '3D模型';
+      if (skippedDifferentKind > 0 || skipped > 0) notices.push(`跳过 ${skippedDifferentKind + skipped} 个非${kindLabel}素材`);
       if (failures.length > 0) notices.push(...failures.slice(0, 4));
-      if (notices.length > 0) alert(`已覆盖上传素材节点，但有部分素材未使用:\n${notices.join('\n')}`);
+      if (notices.length > 0) {
+        alert(`已覆盖上传素材节点，但有部分素材未使用:\n${notices.join('\n')}`);
+      }
       return true;
     },
     []
@@ -2301,11 +2682,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
 
     for (const node of nodesRef.current) {
       if (!ids.includes(node.id) || node.type === 'groupBox') continue;
-      for (const kind of ['image', 'video', 'audio'] as MediaKind[]) {
+      for (const kind of ['image', 'video', 'audio', 'model3d'] as MediaKind[]) {
         getMediaItemsFromData(node.data, kind).forEach(push);
       }
       const buckets = collectMaterialSetBucketsFromData(node.data);
-      for (const kind of ['image', 'video', 'audio'] as MediaKind[]) {
+      for (const kind of ['image', 'video', 'audio'] as Array<Exclude<MediaKind, 'model3d'>>) {
         buckets[kind].forEach((item) => {
           if (!item.url) return;
           push({
@@ -3663,37 +4044,265 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     const findSource = (target: EventTarget | null) => (
       target instanceof Element ? target.closest('[data-drag-source]') as HTMLElement | null : null
     );
-    const onPointerDown = (event: PointerEvent) => {
-      const source = findSource(event.target);
-      if (!source) return;
+    type DragOutPoint = { clientX?: number; clientY?: number; x?: number; y?: number };
+    type DragOutCandidate = {
+      source: HTMLElement;
+      kind: string;
+      url: string;
+      filename: string;
+      startX: number;
+      startY: number;
+      started: boolean;
+      sawChord: boolean;
+    };
+    let candidate: DragOutCandidate | null = null;
+    let suppressContextMenuUntil = 0;
+    let dragOutRequestSeq = 0;
+    let lastFeedbackPoint = {
+      x: typeof window !== 'undefined' ? Math.round(window.innerWidth / 2) : 0,
+      y: typeof window !== 'undefined' ? Math.round(window.innerHeight / 2) : 0,
+    };
+    const pendingRequestIds = new Set<string>();
+
+    const clearFeedbackTimer = () => {
+      if (fileDragOutFeedbackTimerRef.current) {
+        window.clearTimeout(fileDragOutFeedbackTimerRef.current);
+        fileDragOutFeedbackTimerRef.current = null;
+      }
+    };
+    const showDragOutFeedback = (
+      point: DragOutPoint | null | undefined,
+      tone: FileDragOutFeedback['tone'],
+      title: string,
+      detail: string,
+      duration = 2600,
+    ) => {
+      const x = Number(point?.clientX ?? point?.x ?? lastFeedbackPoint.x);
+      const y = Number(point?.clientY ?? point?.y ?? lastFeedbackPoint.y);
+      lastFeedbackPoint = {
+        x: Number.isFinite(x) ? x : lastFeedbackPoint.x,
+        y: Number.isFinite(y) ? y : lastFeedbackPoint.y,
+      };
+      setFileDragOutFeedback({
+        ...lastFeedbackPoint,
+        tone,
+        title,
+        detail,
+      });
+      clearFeedbackTimer();
+      fileDragOutFeedbackTimerRef.current = window.setTimeout(() => {
+        setFileDragOutFeedback(null);
+        fileDragOutFeedbackTimerRef.current = null;
+      }, duration);
+    };
+
+    const stopPointer = (event: PointerEvent | DragEvent | MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      (event as any).stopImmediatePropagation?.();
+    };
+    const materialInfoFromSource = (source: HTMLElement | null) => {
+      if (!source) return null;
       const kind = source.getAttribute('data-drag-kind') || '';
       const url = source.getAttribute('data-drag-url') || '';
-      if (!['image', 'video', 'audio'].includes(kind) || !url) return;
+      if (!['image', 'video', 'audio'].includes(kind) || !url) return null;
+      const filename = source.getAttribute('data-resource-title') || fileNameFromUrl(url) || `${kind}-${Date.now()}`;
+      return { kind, url, filename };
+    };
+    const armSource = (source: HTMLElement) => {
       source.setAttribute('draggable', 'true');
+      source.classList.add('nodrag', 'nopan');
+    };
+    const clearCandidate = () => {
+      candidate = null;
+      setFileDragOutActive(false);
+      document.body.classList.remove('t8-file-drag-out-active');
+    };
+    const setChordSeen = (event?: DragOutPoint | null) => {
+      if (!candidate) return;
+      const firstChord = !candidate.sawChord;
+      candidate.sawChord = true;
+      suppressContextMenuUntil = Date.now() + 900;
+      setFileDragOutActive(true);
+      document.body.classList.add('t8-file-drag-out-active');
+      if (firstChord) {
+        showDragOutFeedback(
+          event,
+          'info',
+          '检测到左键+右键',
+          '继续拖动，会尝试把素材拖到系统文件夹。',
+          1400,
+        );
+      }
+    };
+    const startNativeDragOut = (event: PointerEvent | DragEvent) => {
+      if (!candidate || candidate.started) return false;
+      setChordSeen(event);
+      if (!window.t8pc?.dragFileOut) {
+        candidate.started = true;
+        showDragOutFeedback(
+          event,
+          'warning',
+          '普通浏览器限制',
+          '当前没有 Electron 原生拖出桥接，左键+右键无法主动发起系统文件拖出；请用桌面版或 npm run electron:dev 测试。',
+          4200,
+        );
+        return false;
+      }
+      if (!canUseNativeDragOut(candidate.url)) {
+        candidate.started = true;
+        showDragOutFeedback(
+          event,
+          'warning',
+          '不是本地素材',
+          '只支持本机 input/output/thumbnails 里的图片、视频和音频直接拖到文件夹。',
+          3600,
+        );
+        return false;
+      }
+      stopPointer(event);
+      candidate.started = true;
+      const requestId = `drag-out-${Date.now()}-${++dragOutRequestSeq}`;
+      pendingRequestIds.add(requestId);
+      window.t8pc.dragFileOut({
+        url: candidate.url,
+        filename: candidate.filename,
+        kind: candidate.kind,
+        requestId,
+      });
+      showDragOutFeedback(
+        event,
+        'info',
+        '正在交给系统拖出',
+        '拖到系统文件夹后松开鼠标；如果失败会在这里显示原因。',
+        1800,
+      );
+      return true;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const source = findSource(event.target);
+      const info = materialInfoFromSource(source);
+      if (!source || !info) return;
+      if (event.ctrlKey || event.metaKey) return;
+      if (event.button !== 0 && event.button !== 2) return;
+      armSource(source);
+      candidate = {
+        source,
+        ...info,
+        startX: event.clientX,
+        startY: event.clientY,
+        started: false,
+        sawChord: false,
+      };
+      if (isLeftRightMouseChord(event.buttons)) {
+        setChordSeen(event);
+        stopPointer(event);
+      }
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!candidate) return;
+      if (event.buttons === 0) {
+        clearCandidate();
+        return;
+      }
+      if (!isLeftRightMouseChord(event.buttons)) {
+        return;
+      }
+      setChordSeen(event);
+      stopPointer(event);
+      const moved = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY);
+      if (moved >= FILE_DRAG_OUT_MOVE_TOLERANCE) {
+        startNativeDragOut(event);
+      }
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!candidate) return;
+      if (candidate.sawChord) {
+        stopPointer(event);
+      }
+      clearCandidate();
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (candidate?.sawChord) {
+        stopPointer(event);
+      }
+      clearCandidate();
     };
     const onDragStart = (event: DragEvent) => {
       const source = findSource(event.target);
       if (!source || !event.dataTransfer) return;
-      const kind = source.getAttribute('data-drag-kind') || '';
-      const url = source.getAttribute('data-drag-url') || '';
-      if (!['image', 'video', 'audio'].includes(kind) || !url) return;
-      const absoluteUrl = absoluteMaterialUrl(url);
-      const filename = source.getAttribute('data-resource-title') || fileNameFromUrl(url) || `${kind}-${Date.now()}`;
-      const mime = mimeForExternalDrag(kind, url);
+      const info = materialInfoFromSource(source);
+      if (!info) return;
+      if (event.ctrlKey || event.metaKey) return;
+      const chord = isLeftRightMouseChord((event as any).buttons) || (candidate?.source === source && candidate.sawChord);
+      if (!chord) {
+        event.preventDefault();
+        return;
+      }
+      if (!candidate || candidate.source !== source) {
+        armSource(source);
+        candidate = {
+          source,
+          ...info,
+          startX: event.clientX,
+          startY: event.clientY,
+          started: false,
+          sawChord: true,
+        };
+        setFileDragOutActive(true);
+      }
+      if (startNativeDragOut(event)) return;
+      const absoluteUrl = absoluteMaterialUrl(info.url);
+      const mime = mimeForExternalDrag(info.kind, info.url);
       try {
         event.dataTransfer.effectAllowed = 'copy';
-        event.dataTransfer.setData('DownloadURL', `${mime}:${filename}:${absoluteUrl}`);
+        event.dataTransfer.setData('DownloadURL', `${mime}:${info.filename}:${absoluteUrl}`);
         event.dataTransfer.setData('text/uri-list', absoluteUrl);
         event.dataTransfer.setData('text/plain', absoluteUrl);
       } catch {
-        // Some browser shells restrict custom drag formats; native drag still works.
+        // Some browser shells restrict custom drag formats.
       }
     };
+    const onContextMenu = (event: MouseEvent) => {
+      const source = findSource(event.target);
+      if (!source) return;
+      if (candidate?.sawChord || Date.now() < suppressContextMenuUntil) {
+        stopPointer(event);
+      }
+    };
+    const offDragOutStatus = window.t8pc?.onDragFileOutStatus?.((status) => {
+      if (!status) return;
+      if (status.requestId) {
+        if (!pendingRequestIds.has(status.requestId)) return;
+        pendingRequestIds.delete(status.requestId);
+      }
+      showDragOutFeedback(
+        lastFeedbackPoint,
+        status.success ? 'success' : 'error',
+        status.success ? '系统拖出已启动' : '系统拖出失败',
+        status.message || (status.success ? '拖到文件夹后松开鼠标。' : '请检查素材文件是否还存在。'),
+        status.success ? 1800 : 4200,
+      );
+    });
     window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerCancel, true);
     window.addEventListener('dragstart', onDragStart, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
+    window.addEventListener('blur', clearCandidate);
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerCancel, true);
       window.removeEventListener('dragstart', onDragStart, true);
+      window.removeEventListener('contextmenu', onContextMenu, true);
+      window.removeEventListener('blur', clearCandidate);
+      offDragOutStatus?.();
+      clearFeedbackTimer();
+      document.body.classList.remove('t8-file-drag-out-active');
+      clearCandidate();
     };
   }, []);
 
@@ -4658,6 +5267,22 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
     // v1.2.10.5-hotfix: 同一次 effect 内多个源节点补建的 OutputNode 之间互不可见 (nodes 快照不包含本轮刚 push 的节点),
     // 会导致多源场景下新 OutputNode 之间重叠。累积到 pendingPlacedNodes, 每次避让合并进 existing。
     const pendingPlacedNodes: Node[] = [];
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+    // Clean up bad chains created by older builds where a 3D preview was treated
+    // as a fresh model source and auto-spawned another preview forever.
+    for (const edge of edges) {
+      if (!edge.id.startsWith('e-auto-')) continue;
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (
+        source?.type === 'model-3d-preview' &&
+        target?.type === 'model-3d-preview' &&
+        target.id.startsWith('model-3d-preview-auto-')
+      ) {
+        toRemoveNodeIds.add(target.id);
+      }
+    }
 
     for (const n of nodes) {
       const t = n.type as string;
@@ -4671,6 +5296,9 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       // v1.2.10.5-hotfix2: 跟過源节点尚未被 DOM 测量时跳过，下一轮 nodes 更新（带上 measured）会重新触发 effect。
       // 避免用不准确的字典尺寸计算 baseX 导致 desired position 落在源节点可视范围内。
       if (!(n as any).measured?.width) continue;
+      // model-3d-preview keeps modelUrl/modelUrls in its own data for download/switching.
+      // Only ignore those model fields; its snapshot image still needs normal auto output.
+      const shouldCollectModelOutputs = t !== 'model-3d-preview';
       // v1.2.8.2: 循环器仅在完成后才让 autoOutput 处理, 避免运行中注入 items[i] 时被误认为
       // “已生产产物” 并创建个空的 OutputNode。在 status='success' 时 d.imageUrls/videoUrls/audioUrls
       // 数组才是最终聚合产物, 交给 autoOutput 判并拆为 N 个 OutputNode (每行 3 个网格)。
@@ -4792,6 +5420,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
       const imgs: string[] = [];
       const vids: string[] = [];
       const auds: string[] = [];
+      const mods: string[] = [];
       const pushImg = (u: any) => {
         if (typeof u !== 'string' || !u || seen.has(u)) return;
         seen.add(u);
@@ -4807,21 +5436,36 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         seen.add(u);
         auds.push(u);
       };
+      const pushMod = (u: any) => {
+        if (typeof u !== 'string' || !u || seen.has(u)) return;
+        seen.add(u);
+        mods.push(u);
+      };
       pushImg(d.imageUrl);
       if (Array.isArray(d.imageUrls)) d.imageUrls.forEach(pushImg);
-      // d.urls 是通用产物数组（RH 使用），可能同时含图/视频/音频。
-      // 按扩展名分流，避免 mp4 url 被当 image 加入 imgs 后下游 OutputNode 误用 pickKind='image' 过滤。
+      // d.urls 是通用产物数组（RH/FAL 使用），可能同时含图/视频/音频/3D 模型。
+      // 按扩展名分流，避免 mp4/glb url 被当 image 加入 imgs 后下游 OutputNode 误用 pickKind='image' 过滤。
       if (Array.isArray(d.urls)) {
+        const isModExt = (u: string) => /\.(glb|gltf|obj|fbx|stl|usdz|zip)(\?.*)?$/i.test(u);
         const isVidExt = (u: string) => /\.(mp4|webm|mov|m4v|mkv)(\?.*)?$/i.test(u);
         const isAudExt = (u: string) => /\.(mp3|wav|ogg|m4a|flac|aac)(\?.*)?$/i.test(u);
         d.urls.forEach((u: any) => {
           if (typeof u !== 'string' || !u) return;
-          if (isVidExt(u)) pushVid(u);
+          if (isModExt(u)) {
+            if (shouldCollectModelOutputs) pushMod(u);
+          }
+          else if (isVidExt(u)) pushVid(u);
           else if (isAudExt(u)) pushAud(u);
           else pushImg(u);
         });
       }
       if (Array.isArray(d.generatedImages)) d.generatedImages.forEach(pushImg);
+      if (shouldCollectModelOutputs) {
+        pushMod(d.modelUrl);
+        pushMod(d.directModelUrl);
+        if (Array.isArray(d.modelUrls)) d.modelUrls.forEach(pushMod);
+        if (Array.isArray(d.directModelUrls)) d.directModelUrls.forEach(pushMod);
+      }
       pushVid(d.videoUrl);
       // v1.2.8.2: 支持 videoUrls 数组 (LoopNode 聚合多个视频产物)
       if (Array.isArray(d.videoUrls)) d.videoUrls.forEach(pushVid);
@@ -4837,11 +5481,91 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         ...vids.map((url, i) => ({ kind: 'video' as const, url, kindIndex: i })),
         ...auds.map((url, i) => ({ kind: 'audio' as const, url, kindIndex: i })),
       ];
-      if (items.length === 0) continue;
+      const modelItems = mods.map((url, i) => ({ kind: 'model3d' as const, url, kindIndex: i }));
+      if (items.length === 0 && modelItems.length === 0) continue;
 
-      const sig = items.map((x) => `${x.kind}:${x.url}`).join('|');
+      const sig = [...items, ...modelItems].map((x) => `${x.kind}:${x.url}`).join('|');
       const lastSig = autoOutputProcessedRef.current.get(n.id);
       if (lastSig === sig) continue;
+
+      if (modelItems.length > 0) {
+        const modelUrlSet = new Set(modelItems.map((item) => item.url));
+        const downstreamModelPreviews = edges
+          .filter((e) => e.source === n.id)
+          .map((e) => {
+            const t = nodes.find((x) => x.id === e.target);
+            if (!t || t.type !== 'model-3d-preview') return null;
+            const td: any = t.data || {};
+            const url = String(td.directModelUrl || td.modelUrl || '').trim();
+            const totalIncoming = edges.filter((x) => x.target === t.id).length;
+            const hasOutgoing = edges.some((x) => x.source === t.id);
+            const auto = t.id.startsWith('model-3d-preview-auto-') && e.id.startsWith('e-auto-');
+            const removable = auto && totalIncoming === 1 && !hasOutgoing && td.userMoved !== true;
+            return { id: t.id, url, auto, removable };
+          })
+          .filter(Boolean) as Array<{ id: string; url: string; auto: boolean; removable: boolean }>;
+        const hasManualModelPreview = downstreamModelPreviews.some((item) => !item.auto);
+        for (const preview of downstreamModelPreviews) {
+          if (preview.removable && preview.url && !modelUrlSet.has(preview.url)) {
+            toRemoveNodeIds.add(preview.id);
+            for (const edge of edges) {
+              if (edge.source === preview.id || edge.target === preview.id) toRemoveEdgeIds.add(edge.id);
+            }
+          }
+        }
+        if (!hasManualModelPreview) {
+          const occupiedModelUrls = new Set(downstreamModelPreviews.map((item) => item.url).filter(Boolean));
+          const remainingModels = modelItems.filter((item) => !occupiedModelUrls.has(item.url));
+          if (remainingModels.length > 0) {
+            const _srcRectModel = rectOf(n);
+            const _szModel = defaultSizeOf('model-3d-preview');
+            const baseXModel = (n.position?.x ?? 0) + _srcRectModel.w + 80;
+            const baseYModel = (n.position?.y ?? 0) + _srcRectModel.h / 2 - _szModel.h / 2;
+            const desiredModel: PlacementRect[] = remainingModels.map((_, i) => ({
+              x: baseXModel + (i % 2) * (_szModel.w + 40),
+              y: baseYModel + Math.floor(i / 2) * (_szModel.h + 40),
+              w: _szModel.w,
+              h: _szModel.h,
+            }));
+            const offModel = placeBatchNodes(desiredModel, [...nodes, ...pendingPlacedNodes], { source: 'placement:auto-model3d-output', gap: 0 });
+            remainingModels.forEach((item, i) => {
+              const newId = `model-3d-preview-auto-${n.id}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
+              const newNode: Node = {
+                id: newId,
+                type: 'model-3d-preview',
+                position: {
+                  x: desiredModel[i].x + offModel.dx,
+                  y: desiredModel[i].y + offModel.dy,
+                },
+                data: {
+                  modelUrl: item.url,
+                  modelUrls: [item.url],
+                  directModelUrl: item.url,
+                  directModelUrls: [item.url],
+                  pickKind: item.kind,
+                  pickIndex: item.kindIndex,
+                  status: 'idle',
+                  error: '',
+                },
+                selected: false,
+              } as Node;
+              toAddNodes.push(newNode);
+              pendingPlacedNodes.push(newNode);
+              toAddEdges.push({
+                id: `e-auto-${newId}`,
+                source: n.id,
+                target: newId,
+                type: 'deletable',
+              } as Edge);
+            });
+          }
+        }
+      }
+
+      if (items.length === 0) {
+        newSigPatches.push([n.id, sig]);
+        continue;
+      }
 
       // 收集当前下游 OutputNode（手动 + 自动）
       // 意图：N 个产物 → N 个独立 OutputNode。只要某个 OutputNode 仅从本节点连入且未带 pickKind，
@@ -4985,6 +5709,14 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           target: newId,
           type: 'deletable',
         } as Edge);
+      }
+    }
+
+    if (toRemoveNodeIds.size > 0) {
+      for (const edge of edges) {
+        if (toRemoveNodeIds.has(edge.source) || toRemoveNodeIds.has(edge.target)) {
+          toRemoveEdgeIds.add(edge.id);
+        }
       }
     }
 
@@ -5423,6 +6155,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           viewportMoving={viewportMoving}
           nodeDragging={nodeDragging}
         />
+        <SaintSeiyaSanctuary
+          visualStyle={visualStyle}
+          viewportMoving={viewportMoving}
+          nodeDragging={nodeDragging}
+        />
       </CanvasToolbar>
       <TerminalPanel />
       {connectionPanModeActive && (
@@ -5431,6 +6168,57 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           <span className="t8-connection-pan-hud__title">连线导航模式</span>
           <span className="t8-connection-pan-hud__hint">拖动画布后点击目标接口连接，再按 {shortcutText('connection.pan-mode')} 取消</span>
         </div>
+      )}
+      {fileDragOutFeedback && (
+        <div
+          data-canvas-floating-ui="file-drag-out-feedback"
+          className="pointer-events-none fixed z-[10050] flex max-w-[340px] items-start gap-3 rounded-[14px] border-2 px-3 py-3 text-white shadow-[0_18px_44px_rgba(0,0,0,0.35)] backdrop-blur-md"
+          style={{
+            left: Math.min(
+              Math.max(fileDragOutFeedback.x + 18, 12),
+              Math.max(12, (typeof window !== 'undefined' ? window.innerWidth : 420) - 360),
+            ),
+            top: Math.min(
+              Math.max(fileDragOutFeedback.y + 18, 12),
+              Math.max(12, (typeof window !== 'undefined' ? window.innerHeight : 240) - 128),
+            ),
+            background:
+              fileDragOutFeedback.tone === 'success'
+                ? 'rgba(6, 78, 59, 0.94)'
+                : fileDragOutFeedback.tone === 'warning'
+                  ? 'rgba(91, 64, 10, 0.95)'
+                  : fileDragOutFeedback.tone === 'error'
+                    ? 'rgba(127, 29, 29, 0.95)'
+                    : 'rgba(17, 24, 39, 0.94)',
+            borderColor:
+              fileDragOutFeedback.tone === 'success'
+                ? '#5eead4'
+                : fileDragOutFeedback.tone === 'warning'
+                  ? '#facc15'
+                  : fileDragOutFeedback.tone === 'error'
+                    ? '#fb7185'
+                    : '#93c5fd',
+          }}
+        >
+          <span className="mt-0.5 inline-flex h-9 w-11 shrink-0 overflow-hidden rounded-full border border-white/70 bg-white/15 text-[10px] font-black leading-none">
+            <span className="flex flex-1 items-center justify-center border-r border-white/55 bg-white text-slate-950">左</span>
+            <span className="flex flex-1 items-center justify-center bg-white text-slate-950">右</span>
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-black leading-tight">{fileDragOutFeedback.title}</span>
+            <span className="mt-1 block text-xs font-semibold leading-snug text-white/86">{fileDragOutFeedback.detail}</span>
+          </span>
+        </div>
+      )}
+      {radialMenu && (
+        <RadialNodeMenu
+          center={radialMenu.center}
+          anchor={radialMenu.anchor}
+          cursor={radialMenu.cursor}
+          slots={radialSlots}
+          nodesByType={radialNodesByType}
+          activeIndex={radialMenu.activeIndex}
+        />
       )}
       <input
         ref={fileInputRef}
@@ -5466,6 +6254,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
         selectionKeyCode={memoSelectionKeyCode}
         multiSelectionKeyCode={memoMultiSelectionKeyCode}
         selectionMode={SelectionMode.Partial}
+        panOnDrag={memoPanOnDrag}
         snapToGrid={snapEnabled}
         snapGrid={SNAP_GRID}
         elevateNodesOnSelect={false}
@@ -5527,6 +6316,24 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
           <div className="t8-control-stack">
             <button
               type="button"
+              className={`t8-control-rail-help t8-control-rail-radial t8-mini-icon-button${radialSettingsOpen ? ' is-active' : ''}`}
+              data-canvas-floating-ui="radial-settings-toggle"
+              aria-label="中键圆盘设置"
+              title="中键圆盘设置"
+              aria-expanded={radialSettingsOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                setRadialSettingsOpen((value) => {
+                  const next = !value;
+                  if (next) setModelHelpOpen(false);
+                  return next;
+                });
+              }}
+            >
+              <LucideIcons.Settings2 size={16} />
+            </button>
+            <button
+              type="button"
               className={`t8-control-rail-help t8-mini-icon-button${modelHelpOpen ? ' is-active' : ''}`}
               data-canvas-floating-ui="model-help-toggle"
               aria-label="模型注意事项"
@@ -5534,7 +6341,11 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
               aria-expanded={modelHelpOpen}
               onClick={(event) => {
                 event.stopPropagation();
-                setModelHelpOpen((value) => !value);
+                setModelHelpOpen((value) => {
+                  const next = !value;
+                  if (next) setRadialSettingsOpen(false);
+                  return next;
+                });
               }}
             >
               <LucideIcons.CircleHelp size={16} />
@@ -5563,6 +6374,7 @@ function CanvasInner({ onAddNodeRef, onInsertWorkflowRef }: CanvasInnerProps) {
             onRemove={(id) => setPlacementShelfItems((prev) => prev.filter((item) => item.id !== id))}
           />
         </div>
+        <RadialMenuSettingsModal open={radialSettingsOpen} onClose={() => setRadialSettingsOpen(false)} />
         {modelHelpOpen && (
           <div
             className="t8-model-help-panel nodrag nopan"

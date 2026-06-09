@@ -673,7 +673,11 @@ export type AchievementEventType =
   | 'panorama.generated'
   | 'parsehub.resolved'
   | 'dragon_ball.collected'
-  | 'dragon_ball.set_completed';
+  | 'dragon_ball.set_completed'
+  | 'saint_seiya.cloth_collected'
+  | 'saint_seiya.gold_completed'
+  | 'saint_seiya.battle_won'
+  | 'saint_seiya.cosmo_burst';
 
 export interface AchievementEventPayload {
   type: AchievementEventType;
